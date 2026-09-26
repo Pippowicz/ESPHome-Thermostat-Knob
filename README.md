@@ -161,7 +161,8 @@ notification-present state itself. That logic can be handled by a Home
 Assistant automation.
 
 
-Display design
+Display design:
+
 The normal screen uses a 270° temperature arc.
 - Minimum temperature: 5 °C
 - Maximum temperature: 30 °C
