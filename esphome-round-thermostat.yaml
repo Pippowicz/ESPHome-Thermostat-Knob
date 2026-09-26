@@ -1,0 +1,2641 @@
+esphome:
+  name: temperaturregler-wohnzimmer
+  friendly_name: Temperaturregler Wohnzimmer
+  on_boot:
+    priority: -100
+    then:
+      - logger.log: "Display backlight restored"
+      - delay: 200ms
+      - output.turn_off: power_light
+      - output.turn_on: board_out1
+      - output.turn_on: board_out2
+      - lambda: |-
+          if (!isnan(id(thermostat_climate).target_temperature)) {
+            id(thermostat_setpoint) =
+                id(thermostat_climate).target_temperature;
+            ESP_LOGI(
+              "thermostat",
+              "Wiederhergestellter Sollwert -> %.1f °C",
+              id(thermostat_setpoint)
+            );
+          }
+
+          id(last_activity_ms) = millis();
+          id(standby_active) = false;
+          id(mode_menu_open) = false;
+          id(notification_popup_open) = false;
+          id(force_full_redraw) = true;
+
+      - component.update: round_display
+
+esp32:
+  board: esp32-s3-devkitc-1
+  variant: ESP32S3
+  framework:
+    type: esp-idf
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+logger:
+  level: DEBUG
+
+api:
+  encryption:
+    key: !secret encryption_key
+
+ota:
+  - platform: esphome
+    encryption:
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: Temp Regler Fallback
+    password: !secret fallback_hotspot_password
+
+captive_portal:
+
+globals:
+  - id: thermostat_setpoint
+    type: float
+    restore_value: no
+    initial_value: '21.0'
+
+  - id: mode_menu_open
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  - id: notification_popup_open
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  - id: force_full_redraw
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  - id: standby_active
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  - id: last_activity_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  - id: normal_backlight_brightness
+    type: float
+    restore_value: no
+    initial_value: '1.0'
+
+i2c:
+  - id: touch_i2c_bus
+    sda: GPIO6
+    scl: GPIO7
+    scan: true
+    frequency: 400kHz
+
+spi:
+  id: display_spi
+  clk_pin: GPIO10
+  mosi_pin: GPIO11
+
+font:
+  - file: "gfonts://Roboto"
+    id: thermostat_font
+    size: 38
+
+  - file: "gfonts://Roboto"
+    id: standby_temperature_font
+    size: 57
+
+  - file: "gfonts://Roboto"
+    id: room_temperature_font
+    size: 18
+
+  - file: "gfonts://Roboto"
+    id: menu_font
+    size: 16
+    glyphs:
+      - " !\"%()+,-./0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz°äöüÄÖÜß"
+
+  - file: "gfonts://Roboto"
+    id: notification_font
+    size: 18
+    glyphs:
+      - " !\"%()+,-./0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz°äöüÄÖÜß?"
+
+image:
+  - platform: file
+    file: "mdi:refresh"
+    id: mode_auto_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: 28x28
+
+  - platform: file
+    file: "mdi:fire"
+    id: mode_heat_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: 28x28
+
+  - platform: file
+    file: "mdi:snowflake"
+    id: mode_cool_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: 28x28
+
+  - platform: file
+    file: "mdi:circle-off-outline"
+    id: mode_off_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: 28x28
+
+  - platform: file
+    file: "mdi:refresh"
+    id: standby_mode_auto_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: 42x42
+
+  - platform: file
+    file: "mdi:fire"
+    id: standby_mode_heat_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: 42x42
+
+  - platform: file
+    file: "mdi:snowflake"
+    id: standby_mode_cool_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: 42x42
+
+  - platform: file
+    file: "mdi:circle-off-outline"
+    id: standby_mode_off_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: 42x42
+
+  - platform: file
+    file: "mdi:thermometer"
+    id: room_temperature_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: 28x28
+
+  - platform: file
+    file: "mdi:water"
+    id: room_humidity_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: 28x28
+
+  - platform: file
+    file: "mdi:fan"
+    id: heat_source_heatpump_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: 28x28
+
+  - platform: file
+    file: "mdi:radiator"
+    id: heat_source_radiator_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: 28x28
+
+  - platform: file
+    file: "mdi:air-conditioner"
+    id: heat_source_ac_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: 28x28
+
+  - platform: file
+    file: "mdi:window-open-variant"
+    id: window_open_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: 28x28
+
+  - platform: file
+    file: "mdi:exclamation-thick"
+    id: notification_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: 28x28
+
+display:
+  - platform: ili9xxx
+    id: round_display
+    model: GC9A01A
+    spi_id: display_spi
+    cs_pin: GPIO9
+    dc_pin: GPIO3
+    reset_pin: GPIO14
+    invert_colors: true
+    color_order: BGR
+    dimensions: 240x240
+    update_interval: never
+    auto_clear_enabled: false
+
+    lambda: |-
+      const float MIN_TEMP = 5.0f;
+      const float MAX_TEMP = 30.0f;
+      const float SET_TEMP = id(thermostat_setpoint);
+
+      const int WIDTH = 240;
+      const int HEIGHT = 240;
+      const int PIXELS = WIDTH * HEIGHT;
+
+      const int CX = 120;
+      const int CY = 120;
+
+      const float ARC_RADIUS = 108.0f;
+      const float ARC_WIDTH = 14.0f;
+      const float BORDER_WIDTH = 18.0f;
+
+      const float START_DEG = 135.0f;
+      const float SWEEP_DEG = 270.0f;
+      const float PI_F = 3.14159265359f;
+
+      const Color BG(5, 5, 5);
+
+      const float BORDER_R = 180.0f;
+      const float BORDER_G = 180.0f;
+      const float BORDER_B = 180.0f;
+
+      const float EMPTY_R = 45.0f;
+      const float EMPTY_G = 45.0f;
+      const float EMPTY_B = 45.0f;
+
+      const Color MODE_OFF(170, 170, 170);
+      const Color MODE_HEAT(255, 70, 45);
+      const Color MODE_COOL(65, 155, 255);
+      const Color MODE_AUTO(65, 200, 100);
+
+      static uint8_t *border_map = nullptr;
+      static uint8_t *arc_map = nullptr;
+      static uint8_t *position_map = nullptr;
+
+      static bool lookup_ready = false;
+      static bool lookup_failed = false;
+      static bool framebuffer_initialized = false;
+
+      // ==========================================================
+      // RING-LOOKUP
+      // ==========================================================
+
+      if (!lookup_ready && !lookup_failed) {
+
+        ESP_LOGI(
+          "thermostat",
+          "Erzeuge 4x4 Ring-Lookup im PSRAM..."
+        );
+
+        border_map = (uint8_t *) heap_caps_malloc(
+          PIXELS,
+          MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT
+        );
+
+        arc_map = (uint8_t *) heap_caps_malloc(
+          PIXELS,
+          MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT
+        );
+
+        position_map = (uint8_t *) heap_caps_malloc(
+          PIXELS,
+          MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT
+        );
+
+        if (
+          border_map == nullptr ||
+          arc_map == nullptr ||
+          position_map == nullptr
+        ) {
+
+          ESP_LOGE(
+            "thermostat",
+            "PSRAM-Allokation fuer Ring-Lookup fehlgeschlagen"
+          );
+
+          if (border_map != nullptr) {
+            heap_caps_free(border_map);
+            border_map = nullptr;
+          }
+
+          if (arc_map != nullptr) {
+            heap_caps_free(arc_map);
+            arc_map = nullptr;
+          }
+
+          if (position_map != nullptr) {
+            heap_caps_free(position_map);
+            position_map = nullptr;
+          }
+
+          lookup_failed = true;
+
+        } else {
+
+          memset(border_map, 0, PIXELS);
+          memset(arc_map, 0, PIXELS);
+          memset(position_map, 0, PIXELS);
+
+          const int SS = 4;
+          const float INV_SS = 1.0f / SS;
+          const float SAMPLE_COUNT = SS * SS;
+
+          const float border_half =
+              BORDER_WIDTH * 0.5f;
+
+          const float arc_half =
+              ARC_WIDTH * 0.5f;
+
+          const float border_inner =
+              ARC_RADIUS - border_half;
+
+          const float border_outer =
+              ARC_RADIUS + border_half;
+
+          const float arc_inner =
+              ARC_RADIUS - arc_half;
+
+          const float arc_outer =
+              ARC_RADIUS + arc_half;
+
+          const float border_inner2 =
+              border_inner * border_inner;
+
+          const float border_outer2 =
+              border_outer * border_outer;
+
+          const float arc_inner2 =
+              arc_inner * arc_inner;
+
+          const float arc_outer2 =
+              arc_outer * arc_outer;
+
+          const float start_rad =
+              START_DEG * PI_F / 180.0f;
+
+          const float end_rad =
+              (START_DEG + SWEEP_DEG) *
+              PI_F / 180.0f;
+
+          const float start_x =
+              CX + cosf(start_rad) * ARC_RADIUS;
+
+          const float start_y =
+              CY + sinf(start_rad) * ARC_RADIUS;
+
+          const float end_x =
+              CX + cosf(end_rad) * ARC_RADIUS;
+
+          const float end_y =
+              CY + sinf(end_rad) * ARC_RADIUS;
+
+          const float border_cap2 =
+              border_half * border_half;
+
+          const float arc_cap2 =
+              arc_half * arc_half;
+
+          const float reject_outer =
+              ARC_RADIUS +
+              border_half +
+              1.5f;
+
+          const float reject_inner =
+              ARC_RADIUS -
+              border_half -
+              1.5f;
+
+          const float reject_outer2 =
+              reject_outer * reject_outer;
+
+          const float reject_inner2 =
+              reject_inner * reject_inner;
+
+          for (int y = 0; y < HEIGHT; y++) {
+            for (int x = 0; x < WIDTH; x++) {
+
+              float center_dx =
+                  (x + 0.5f) - CX;
+
+              float center_dy =
+                  (y + 0.5f) - CY;
+
+              float center_d2 =
+                  center_dx * center_dx +
+                  center_dy * center_dy;
+
+              if (
+                center_d2 > reject_outer2 ||
+                center_d2 < reject_inner2
+              ) {
+                continue;
+              }
+
+              int border_count = 0;
+              int arc_count = 0;
+              float position_sum = 0.0f;
+
+              for (int sy = 0; sy < SS; sy++) {
+                for (int sx = 0; sx < SS; sx++) {
+
+                  float sample_x =
+                      x +
+                      (sx + 0.5f) *
+                      INV_SS;
+
+                  float sample_y =
+                      y +
+                      (sy + 0.5f) *
+                      INV_SS;
+
+                  float dx =
+                      sample_x - CX;
+
+                  float dy =
+                      sample_y - CY;
+
+                  float d2 =
+                      dx * dx +
+                      dy * dy;
+
+                  float angle =
+                      atan2f(dy, dx) *
+                      180.0f / PI_F;
+
+                  if (angle < 0.0f)
+                    angle += 360.0f;
+
+                  float relative =
+                      angle - START_DEG;
+
+                  if (relative < 0.0f)
+                    relative += 360.0f;
+
+                  bool angular_inside =
+                      relative <= SWEEP_DEG;
+
+                  float position =
+                      relative / SWEEP_DEG;
+
+                  float sdx =
+                      sample_x - start_x;
+
+                  float sdy =
+                      sample_y - start_y;
+
+                  float edx =
+                      sample_x - end_x;
+
+                  float edy =
+                      sample_y - end_y;
+
+                  float start_d2 =
+                      sdx * sdx +
+                      sdy * sdy;
+
+                  float end_d2 =
+                      edx * edx +
+                      edy * edy;
+
+                  bool border_inside = false;
+                  bool arc_inside = false;
+
+                  if (
+                    angular_inside &&
+                    d2 >= border_inner2 &&
+                    d2 <= border_outer2
+                  ) {
+                    border_inside = true;
+                  }
+
+                  if (
+                    start_d2 <= border_cap2 ||
+                    end_d2 <= border_cap2
+                  ) {
+                    border_inside = true;
+                  }
+
+                  if (
+                    angular_inside &&
+                    d2 >= arc_inner2 &&
+                    d2 <= arc_outer2
+                  ) {
+                    arc_inside = true;
+                  }
+
+                  if (start_d2 <= arc_cap2) {
+                    arc_inside = true;
+                    position = 0.0f;
+                  }
+
+                  if (end_d2 <= arc_cap2) {
+                    arc_inside = true;
+                    position = 1.0f;
+                  }
+
+                  if (border_inside)
+                    border_count++;
+
+                  if (arc_inside) {
+                    arc_count++;
+                    position_sum += position;
+                  }
+                }
+              }
+
+              const int index =
+                  y * WIDTH + x;
+
+              if (border_count > 0) {
+                border_map[index] =
+                    (uint8_t) roundf(
+                      255.0f *
+                      border_count /
+                      SAMPLE_COUNT
+                    );
+              }
+
+              if (arc_count > 0) {
+                arc_map[index] =
+                    (uint8_t) roundf(
+                      255.0f *
+                      arc_count /
+                      SAMPLE_COUNT
+                    );
+
+                float average_position =
+                    position_sum /
+                    arc_count;
+
+                if (average_position < 0.0f)
+                  average_position = 0.0f;
+
+                if (average_position > 1.0f)
+                  average_position = 1.0f;
+
+                position_map[index] =
+                    (uint8_t) roundf(
+                      average_position *
+                      255.0f
+                    );
+              }
+            }
+          }
+
+          lookup_ready = true;
+
+          ESP_LOGI(
+            "thermostat",
+            "4x4 Ring-Lookup fertig"
+          );
+        }
+      }
+
+      // ==========================================================
+      // FRAMEBUFFER
+      // ==========================================================
+
+      if (
+        !framebuffer_initialized ||
+        id(force_full_redraw)
+      ) {
+        it.fill(BG);
+        framebuffer_initialized = true;
+        id(force_full_redraw) = false;
+      }
+
+      // ==========================================================
+      // BENACHRICHTIGUNGS-POPUP
+      // ==========================================================
+
+      if (id(notification_popup_open)) {
+
+        const Color POPUP_BG(5, 5, 5);
+        const Color POPUP_COLOR(210, 210, 210);
+        const Color POPUP_ICON_COLOR(190, 190, 190);
+
+        it.fill(POPUP_BG);
+
+        it.image(
+          120,
+          38,
+          id(notification_icon),
+          ImageAlign::CENTER,
+          POPUP_ICON_COLOR,
+          POPUP_BG
+        );
+
+        std::string message =
+            id(notification_text).state;
+
+        if (message.empty()) {
+          message = "Keine Benachrichtigung";
+        }
+
+        std::vector<std::string> lines;
+        std::string line;
+        std::string word;
+
+        auto push_word = [&]() {
+          if (word.empty())
+            return;
+
+          if (line.empty()) {
+            line = word;
+          } else if (
+            (line.size() + 1 + word.size()) <= 21
+          ) {
+            line += " ";
+            line += word;
+          } else {
+            lines.push_back(line);
+            line = word;
+          }
+
+          word.clear();
+        };
+
+        for (
+          size_t i = 0;
+          i < message.size();
+          i++
+        ) {
+          const char c = message[i];
+
+          if (c == '\n') {
+            push_word();
+
+            if (!line.empty()) {
+              lines.push_back(line);
+              line.clear();
+            }
+
+            continue;
+          }
+
+          if (c == ' ') {
+            push_word();
+            continue;
+          }
+
+          word += c;
+        }
+
+        push_word();
+
+        if (!line.empty()) {
+          lines.push_back(line);
+        }
+
+        const int MAX_LINES = 6;
+
+        if ((int) lines.size() > MAX_LINES) {
+          lines.resize(MAX_LINES);
+
+          if (
+            lines[MAX_LINES - 1].size() > 17
+          ) {
+            lines[MAX_LINES - 1].resize(17);
+          }
+
+          lines[MAX_LINES - 1] += "...";
+        }
+
+        const int LINE_HEIGHT = 23;
+
+        const int total_height =
+            lines.size() *
+            LINE_HEIGHT;
+
+        int text_y =
+            125 -
+            total_height / 2;
+
+        if (text_y < 68)
+          text_y = 68;
+
+        for (
+          size_t i = 0;
+          i < lines.size();
+          i++
+        ) {
+          it.print(
+            120,
+            text_y +
+              i * LINE_HEIGHT,
+            id(notification_font),
+            POPUP_COLOR,
+            TextAlign::TOP_CENTER,
+            lines[i].c_str()
+          );
+        }
+
+        return;
+      }
+
+      // ==========================================================
+      // STANDBY
+      // ==========================================================
+
+      if (id(standby_active)) {
+
+        const Color STANDBY_BG(0, 0, 0);
+        const Color STANDBY_COLOR(150, 150, 150);
+
+        it.fill(STANDBY_BG);
+
+        const auto standby_mode =
+            id(thermostat_climate).mode;
+
+        if (
+          standby_mode ==
+          climate::CLIMATE_MODE_OFF
+        ) {
+          it.image(
+            120,
+            55,
+            id(standby_mode_off_icon),
+            ImageAlign::CENTER,
+            STANDBY_COLOR,
+            STANDBY_BG
+          );
+        }
+
+        else if (
+          standby_mode ==
+          climate::CLIMATE_MODE_HEAT
+        ) {
+          it.image(
+            120,
+            55,
+            id(standby_mode_heat_icon),
+            ImageAlign::CENTER,
+            STANDBY_COLOR,
+            STANDBY_BG
+          );
+        }
+
+        else if (
+          standby_mode ==
+          climate::CLIMATE_MODE_COOL
+        ) {
+          it.image(
+            120,
+            55,
+            id(standby_mode_cool_icon),
+            ImageAlign::CENTER,
+            STANDBY_COLOR,
+            STANDBY_BG
+          );
+        }
+
+        else if (
+          standby_mode ==
+          climate::CLIMATE_MODE_AUTO
+        ) {
+          it.image(
+            120,
+            55,
+            id(standby_mode_auto_icon),
+            ImageAlign::CENTER,
+            STANDBY_COLOR,
+            STANDBY_BG
+          );
+        }
+
+        if (
+          standby_mode ==
+          climate::CLIMATE_MODE_OFF
+        ) {
+          it.print(
+            120,
+            125,
+            id(standby_temperature_font),
+            STANDBY_COLOR,
+            TextAlign::CENTER,
+            "Off"
+          );
+        } else {
+          it.printf(
+            120,
+            125,
+            id(standby_temperature_font),
+            STANDBY_COLOR,
+            TextAlign::CENTER,
+            "%.1f °C",
+            id(room_temperature).state
+          );
+        }
+
+        if (id(notification_present).state) {
+          it.image(
+            120,
+            198,
+            id(notification_icon),
+            ImageAlign::CENTER,
+            STANDBY_COLOR,
+            STANDBY_BG
+          );
+        }
+
+        return;
+      }
+
+      // ==========================================================
+      // RADIALES MODUS-MENÜ - 5 x 72°
+      // ==========================================================
+
+      if (id(mode_menu_open)) {
+
+        const int MENU_OUTER_R = 106;
+        const int MENU_INNER_R = 32;
+
+        const int OUTER_R2 =
+            MENU_OUTER_R *
+            MENU_OUTER_R;
+
+        const int INNER_R2 =
+            MENU_INNER_R *
+            MENU_INNER_R;
+
+        const Color MENU_BG(5, 5, 5);
+        const Color MENU_NORMAL(28, 31, 35);
+        const Color MENU_BORDER(68, 73, 80);
+
+        const Color AUTO_BG(18, 61, 45);
+        const Color HEAT_BG(92, 37, 24);
+        const Color COOL_BG(22, 58, 91);
+        const Color OFF_BG(55, 57, 62);
+
+        const Color NOTIFICATION_BG(
+          70,
+          55,
+          20
+        );
+
+        const Color TEXT_NORMAL(
+          225,
+          225,
+          230
+        );
+
+        const Color NOTIFICATION_COLOR(
+          230,
+          190,
+          70
+        );
+
+        const auto mode =
+            id(thermostat_climate).mode;
+
+        it.fill(MENU_BG);
+
+        for (
+          int y = CY - MENU_OUTER_R;
+          y <= CY + MENU_OUTER_R;
+          y++
+        ) {
+          for (
+            int x = CX - MENU_OUTER_R;
+            x <= CX + MENU_OUTER_R;
+            x++
+          ) {
+
+            const int dx = x - CX;
+            const int dy = y - CY;
+
+            const int d2 =
+                dx * dx +
+                dy * dy;
+
+            if (
+              d2 > OUTER_R2 ||
+              d2 < INNER_R2
+            ) {
+              continue;
+            }
+
+            float angle =
+                atan2f(
+                  (float) dy,
+                  (float) dx
+                ) *
+                180.0f /
+                PI_F;
+
+            if (angle < 0.0f)
+              angle += 360.0f;
+
+            int segment;
+
+            if (
+              angle >= 54.0f &&
+              angle < 126.0f
+            ) {
+              segment = 4;
+            }
+
+            else if (
+              angle >= 126.0f &&
+              angle < 198.0f
+            ) {
+              segment = 3;
+            }
+
+            else if (
+              angle >= 198.0f &&
+              angle < 270.0f
+            ) {
+              segment = 1;
+            }
+
+            else if (
+              angle >= 270.0f &&
+              angle < 342.0f
+            ) {
+              segment = 0;
+            }
+
+            else {
+              segment = 2;
+            }
+
+            Color fill = MENU_NORMAL;
+
+            if (
+              segment == 0 &&
+              mode ==
+                climate::CLIMATE_MODE_AUTO
+            ) {
+              fill = AUTO_BG;
+            }
+
+            else if (
+              segment == 1 &&
+              mode ==
+                climate::CLIMATE_MODE_HEAT
+            ) {
+              fill = HEAT_BG;
+            }
+
+            else if (
+              segment == 2 &&
+              mode ==
+                climate::CLIMATE_MODE_COOL
+            ) {
+              fill = COOL_BG;
+            }
+
+            else if (
+              segment == 3 &&
+              mode ==
+                climate::CLIMATE_MODE_OFF
+            ) {
+              fill = OFF_BG;
+            }
+
+            else if (
+              segment == 4 &&
+              id(notification_present).state
+            ) {
+              fill = NOTIFICATION_BG;
+            }
+
+            it.draw_pixel_at(
+              x,
+              y,
+              fill
+            );
+          }
+        }
+
+        const float separator_angles[5] = {
+          54.0f,
+          126.0f,
+          198.0f,
+          270.0f,
+          342.0f
+        };
+
+        for (int i = 0; i < 5; i++) {
+
+          const float a =
+              separator_angles[i] *
+              PI_F /
+              180.0f;
+
+          const int x1 =
+              CX +
+              cosf(a) *
+              MENU_INNER_R;
+
+          const int y1 =
+              CY +
+              sinf(a) *
+              MENU_INNER_R;
+
+          const int x2 =
+              CX +
+              cosf(a) *
+              MENU_OUTER_R;
+
+          const int y2 =
+              CY +
+              sinf(a) *
+              MENU_OUTER_R;
+
+          it.line(
+            x1,
+            y1,
+            x2,
+            y2,
+            MENU_BORDER
+          );
+        }
+
+        it.circle(
+          CX,
+          CY,
+          MENU_OUTER_R,
+          MENU_BORDER
+        );
+
+        it.circle(
+          CX,
+          CY,
+          MENU_OUTER_R - 1,
+          MENU_BORDER
+        );
+
+        it.filled_circle(
+          CX,
+          CY,
+          MENU_INNER_R,
+          MENU_BG
+        );
+
+        it.circle(
+          CX,
+          CY,
+          MENU_INNER_R,
+          MENU_BORDER
+        );
+
+        it.circle(
+          CX,
+          CY,
+          MENU_INNER_R - 1,
+          MENU_BORDER
+        );
+
+        // AUTO
+        it.image(
+          164,
+          59,
+          id(mode_auto_icon),
+          ImageAlign::CENTER,
+          MODE_AUTO,
+          mode == climate::CLIMATE_MODE_AUTO
+            ? AUTO_BG
+            : MENU_NORMAL
+        );
+
+        it.print(
+          164,
+          82,
+          id(menu_font),
+          mode == climate::CLIMATE_MODE_AUTO
+            ? MODE_AUTO
+            : TEXT_NORMAL,
+          TextAlign::CENTER,
+          "Auto"
+        );
+
+        // HEIZEN
+        it.image(
+          76,
+          59,
+          id(mode_heat_icon),
+          ImageAlign::CENTER,
+          MODE_HEAT,
+          mode == climate::CLIMATE_MODE_HEAT
+            ? HEAT_BG
+            : MENU_NORMAL
+        );
+
+        it.print(
+          76,
+          82,
+          id(menu_font),
+          mode == climate::CLIMATE_MODE_HEAT
+            ? MODE_HEAT
+            : TEXT_NORMAL,
+          TextAlign::CENTER,
+          "Heizen"
+        );
+
+        // KÜHLEN
+        it.image(
+          191,
+          143,
+          id(mode_cool_icon),
+          ImageAlign::CENTER,
+          MODE_COOL,
+          mode == climate::CLIMATE_MODE_COOL
+            ? COOL_BG
+            : MENU_NORMAL
+        );
+
+        it.print(
+          184,
+          166,
+          id(menu_font),
+          mode == climate::CLIMATE_MODE_COOL
+            ? MODE_COOL
+            : TEXT_NORMAL,
+          TextAlign::CENTER,
+          "Kühlen"
+        );
+
+        // AUS
+        it.image(
+          49,
+          143,
+          id(mode_off_icon),
+          ImageAlign::CENTER,
+          MODE_OFF,
+          mode == climate::CLIMATE_MODE_OFF
+            ? OFF_BG
+            : MENU_NORMAL
+        );
+
+        it.print(
+          54,
+          166,
+          id(menu_font),
+          mode == climate::CLIMATE_MODE_OFF
+            ? MODE_OFF
+            : TEXT_NORMAL,
+          TextAlign::CENTER,
+          "Aus"
+        );
+
+        // BENACHRICHTIGUNG
+        if (id(notification_present).state) {
+          it.image(
+            120,
+            195,
+            id(notification_icon),
+            ImageAlign::CENTER,
+            NOTIFICATION_COLOR,
+            NOTIFICATION_BG
+          );
+        }
+
+        return;
+      }
+
+      // ==========================================================
+      // NORMALER THERMOSTAT-SCREEN
+      // ==========================================================
+
+      float normalized =
+          (SET_TEMP - MIN_TEMP) /
+          (MAX_TEMP - MIN_TEMP);
+
+      if (normalized < 0.0f)
+        normalized = 0.0f;
+
+      if (normalized > 1.0f)
+        normalized = 1.0f;
+
+      if (lookup_ready) {
+
+        for (int y = 0; y < HEIGHT; y++) {
+          for (int x = 0; x < WIDTH; x++) {
+
+            const int index =
+                y * WIDTH + x;
+
+            const uint8_t border_value =
+                border_map[index];
+
+            if (border_value == 0)
+              continue;
+
+            const float border_cov =
+                border_value / 255.0f;
+
+            float r =
+                5.0f +
+                (BORDER_R - 5.0f) *
+                border_cov;
+
+            float g =
+                5.0f +
+                (BORDER_G - 5.0f) *
+                border_cov;
+
+            float b =
+                5.0f +
+                (BORDER_B - 5.0f) *
+                border_cov;
+
+            const uint8_t arc_value =
+                arc_map[index];
+
+            if (arc_value > 0) {
+
+              const float arc_cov =
+                  arc_value / 255.0f;
+
+              const float position =
+                  position_map[index] /
+                  255.0f;
+
+              float arc_r;
+              float arc_g;
+              float arc_b;
+
+              if (position <= normalized) {
+
+                arc_r =
+                    255.0f *
+                    position;
+
+                arc_g = 0.0f;
+
+                arc_b =
+                    255.0f *
+                    (1.0f - position);
+
+              } else {
+
+                arc_r = EMPTY_R;
+                arc_g = EMPTY_G;
+                arc_b = EMPTY_B;
+              }
+
+              r =
+                  r *
+                  (1.0f - arc_cov) +
+                  arc_r *
+                  arc_cov;
+
+              g =
+                  g *
+                  (1.0f - arc_cov) +
+                  arc_g *
+                  arc_cov;
+
+              b =
+                  b *
+                  (1.0f - arc_cov) +
+                  arc_b *
+                  arc_cov;
+            }
+
+            it.draw_pixel_at(
+              x,
+              y,
+              Color(
+                (uint8_t) r,
+                (uint8_t) g,
+                (uint8_t) b
+              )
+            );
+          }
+        }
+      }
+
+      // ==========================================================
+      // MARKER
+      // ==========================================================
+
+      float marker_deg =
+          START_DEG +
+          normalized *
+          SWEEP_DEG;
+
+      float marker_rad =
+          marker_deg *
+          PI_F /
+          180.0f;
+
+      float marker_cx =
+          CX +
+          cosf(marker_rad) *
+          ARC_RADIUS;
+
+      float marker_cy =
+          CY +
+          sinf(marker_rad) *
+          ARC_RADIUS;
+
+      const float MARKER_OUTER = 8.0f;
+      const float MARKER_INNER = 4.5f;
+      const int MARKER_SS = 4;
+
+      const float MARKER_INV_SS =
+          1.0f /
+          MARKER_SS;
+
+      const float MARKER_SAMPLE_COUNT =
+          MARKER_SS *
+          MARKER_SS;
+
+      const float MARKER_OUTER2 =
+          MARKER_OUTER *
+          MARKER_OUTER;
+
+      const float MARKER_INNER2 =
+          MARKER_INNER *
+          MARKER_INNER;
+
+      int mx0 =
+          (int) floorf(
+            marker_cx -
+            MARKER_OUTER - 1
+          );
+
+      int mx1 =
+          (int) ceilf(
+            marker_cx +
+            MARKER_OUTER + 1
+          );
+
+      int my0 =
+          (int) floorf(
+            marker_cy -
+            MARKER_OUTER - 1
+          );
+
+      int my1 =
+          (int) ceilf(
+            marker_cy +
+            MARKER_OUTER + 1
+          );
+
+      for (int y = my0; y <= my1; y++) {
+        for (int x = mx0; x <= mx1; x++) {
+
+          if (
+            x < 0 ||
+            x >= WIDTH ||
+            y < 0 ||
+            y >= HEIGHT
+          ) {
+            continue;
+          }
+
+          int outer_count = 0;
+          int inner_count = 0;
+
+          for (int sy = 0; sy < MARKER_SS; sy++) {
+            for (int sx = 0; sx < MARKER_SS; sx++) {
+
+              float sample_x =
+                  x +
+                  (sx + 0.5f) *
+                  MARKER_INV_SS;
+
+              float sample_y =
+                  y +
+                  (sy + 0.5f) *
+                  MARKER_INV_SS;
+
+              float dx =
+                  sample_x -
+                  marker_cx;
+
+              float dy =
+                  sample_y -
+                  marker_cy;
+
+              float dist2 =
+                  dx * dx +
+                  dy * dy;
+
+              if (dist2 <= MARKER_OUTER2)
+                outer_count++;
+
+              if (dist2 <= MARKER_INNER2)
+                inner_count++;
+            }
+          }
+
+          if (outer_count == 0)
+            continue;
+
+          const float p = normalized;
+
+          const float base_r =
+              255.0f * p;
+
+          const float base_g = 0.0f;
+
+          const float base_b =
+              255.0f *
+              (1.0f - p);
+
+          const float outer_cov =
+              outer_count /
+              MARKER_SAMPLE_COUNT;
+
+          const float inner_cov =
+              inner_count /
+              MARKER_SAMPLE_COUNT;
+
+          float r =
+              base_r *
+              (1.0f - outer_cov) +
+              10.0f *
+              outer_cov;
+
+          float g =
+              base_g *
+              (1.0f - outer_cov) +
+              10.0f *
+              outer_cov;
+
+          float b =
+              base_b *
+              (1.0f - outer_cov) +
+              10.0f *
+              outer_cov;
+
+          r =
+              r *
+              (1.0f - inner_cov) +
+              255.0f *
+              inner_cov;
+
+          g =
+              g *
+              (1.0f - inner_cov) +
+              255.0f *
+              inner_cov;
+
+          b =
+              b *
+              (1.0f - inner_cov) +
+              255.0f *
+              inner_cov;
+
+          it.draw_pixel_at(
+            x,
+            y,
+            Color(
+              (uint8_t) r,
+              (uint8_t) g,
+              (uint8_t) b
+            )
+          );
+        }
+      }
+
+      // ==========================================================
+      // MODUS-STATUS
+      // ==========================================================
+
+      it.filled_rectangle(
+        104,
+        41,
+        32,
+        40,
+        BG
+      );
+
+      const auto climate_mode =
+          id(thermostat_climate).mode;
+
+      if (
+        climate_mode ==
+        climate::CLIMATE_MODE_OFF
+      ) {
+        it.image(
+          120,
+          57,
+          id(mode_off_icon),
+          ImageAlign::CENTER,
+          MODE_OFF,
+          BG
+        );
+      }
+
+      else if (
+        climate_mode ==
+        climate::CLIMATE_MODE_HEAT
+      ) {
+        it.image(
+          120,
+          57,
+          id(mode_heat_icon),
+          ImageAlign::CENTER,
+          MODE_HEAT,
+          BG
+        );
+      }
+
+      else if (
+        climate_mode ==
+        climate::CLIMATE_MODE_COOL
+      ) {
+        it.image(
+          120,
+          57,
+          id(mode_cool_icon),
+          ImageAlign::CENTER,
+          MODE_COOL,
+          BG
+        );
+      }
+
+      else if (
+        climate_mode ==
+        climate::CLIMATE_MODE_AUTO
+      ) {
+        it.image(
+          120,
+          57,
+          id(mode_auto_icon),
+          ImageAlign::CENTER,
+          MODE_AUTO,
+          BG
+        );
+      }
+
+      // ==========================================================
+      // SOLLTEMPERATUR / OFF
+      // ==========================================================
+
+      it.filled_rectangle(
+        50,
+        84,
+        140,
+        52,
+        BG
+      );
+
+      if (
+        climate_mode ==
+        climate::CLIMATE_MODE_OFF
+      ) {
+        it.print(
+          CX,
+          CY - 15,
+          id(thermostat_font),
+          Color(255,255,255),
+          TextAlign::CENTER,
+          "Off"
+        );
+      } else {
+        it.printf(
+          CX,
+          CY - 15,
+          id(thermostat_font),
+          Color(255,255,255),
+          TextAlign::CENTER,
+          "%.1f °C",
+          SET_TEMP
+        );
+      }
+
+      // ==========================================================
+      // ISTTEMPERATUR + LUFTFEUCHTIGKEIT
+      // ==========================================================
+
+      const float ROOM_TEMP =
+          id(room_temperature).state;
+
+      const bool SHOW_HUMIDITY =
+          id(humidity_display).current_option() == "An";
+
+      const Color ROOM_COLOR(
+        190,
+        190,
+        190
+      );
+
+      for (int y = 137; y <= 182; y++) {
+        for (int x = 24; x <= 216; x++) {
+
+          const int index =
+              y * WIDTH + x;
+
+          if (
+            !lookup_ready ||
+            border_map[index] == 0
+          ) {
+            it.draw_pixel_at(
+              x,
+              y,
+              BG
+            );
+          }
+        }
+      }
+
+      if (SHOW_HUMIDITY) {
+
+        it.image(
+          49,
+          153,
+          id(room_temperature_icon),
+          ImageAlign::CENTER,
+          ROOM_COLOR,
+          BG
+        );
+
+        it.printf(
+          65,
+          151,
+          id(room_temperature_font),
+          ROOM_COLOR,
+          TextAlign::CENTER_LEFT,
+          "%.1f °C",
+          ROOM_TEMP
+        );
+
+        const float ROOM_HUMIDITY =
+            id(room_humidity).state;
+
+        it.image(
+          142,
+          153,
+          id(room_humidity_icon),
+          ImageAlign::CENTER,
+          ROOM_COLOR,
+          BG
+        );
+
+        it.printf(
+          158,
+          151,
+          id(room_temperature_font),
+          ROOM_COLOR,
+          TextAlign::CENTER_LEFT,
+          "%.0f%%",
+          ROOM_HUMIDITY
+        );
+
+      } else {
+
+        it.image(
+          83,
+          153,
+          id(room_temperature_icon),
+          ImageAlign::CENTER,
+          ROOM_COLOR,
+          BG
+        );
+
+        it.printf(
+          100,
+          151,
+          id(room_temperature_font),
+          ROOM_COLOR,
+          TextAlign::CENTER_LEFT,
+          "%.1f °C",
+          ROOM_TEMP
+        );
+      }
+
+      // ==========================================================
+      // HEIZQUELLE + FENSTER + BENACHRICHTIGUNG
+      // ==========================================================
+
+      const bool SHOW_HEAT_SOURCE =
+          climate_mode == climate::CLIMATE_MODE_HEAT ||
+          climate_mode == climate::CLIMATE_MODE_AUTO;
+
+      const bool WINDOW_OPEN =
+          id(window_open).state;
+
+      const bool NOTIFICATION_PRESENT =
+          id(notification_present).state;
+
+      const Color STATUS_COLOR(
+        190,
+        190,
+        190
+      );
+
+      it.filled_rectangle(
+        64,
+        184,
+        112,
+        30,
+        BG
+      );
+
+      int status_count = 0;
+
+      if (SHOW_HEAT_SOURCE)
+        status_count++;
+
+      if (WINDOW_OPEN)
+        status_count++;
+
+      if (NOTIFICATION_PRESENT)
+        status_count++;
+
+      int status_index = 0;
+
+      auto get_status_x = [&](int index) -> int {
+
+        if (status_count <= 1)
+          return 120;
+
+        if (status_count == 2)
+          return index == 0 ? 101 : 139;
+
+        if (index == 0)
+          return 82;
+
+        if (index == 1)
+          return 120;
+
+        return 158;
+      };
+
+      const int STATUS_Y = 199;
+
+      if (SHOW_HEAT_SOURCE) {
+
+        const int icon_x =
+            get_status_x(status_index++);
+
+        if (
+          id(heating_source).current_option() ==
+          "Wärmepumpe"
+        ) {
+          it.image(
+            icon_x,
+            STATUS_Y,
+            id(heat_source_heatpump_icon),
+            ImageAlign::CENTER,
+            STATUS_COLOR,
+            BG
+          );
+        }
+
+        else if (
+          id(heating_source).current_option() ==
+          "Heizkörper"
+        ) {
+          it.image(
+            icon_x,
+            STATUS_Y,
+            id(heat_source_radiator_icon),
+            ImageAlign::CENTER,
+            STATUS_COLOR,
+            BG
+          );
+        }
+
+        else {
+          it.image(
+            icon_x,
+            STATUS_Y,
+            id(heat_source_ac_icon),
+            ImageAlign::CENTER,
+            STATUS_COLOR,
+            BG
+          );
+        }
+      }
+
+      if (WINDOW_OPEN) {
+
+        const int icon_x =
+            get_status_x(status_index++);
+
+        it.image(
+          icon_x,
+          STATUS_Y,
+          id(window_open_icon),
+          ImageAlign::CENTER,
+          STATUS_COLOR,
+          BG
+        );
+      }
+
+      if (NOTIFICATION_PRESENT) {
+
+        const int icon_x =
+            get_status_x(status_index++);
+
+        it.image(
+          icon_x,
+          STATUS_Y,
+          id(notification_icon),
+          ImageAlign::CENTER,
+          STATUS_COLOR,
+          BG
+        );
+      }
+
+touchscreen:
+  - platform: cst816
+    id: touchscreen_cst816
+    i2c_id: touch_i2c_bus
+    display: round_display
+    interrupt_pin: GPIO5
+    reset_pin: GPIO13
+    skip_probe: true
+    update_interval: 30ms
+
+    calibration:
+      x_min: 0
+      x_max: 240
+      y_min: 0
+      y_max: 240
+
+    transform:
+      swap_xy: false
+      mirror_x: false
+      mirror_y: false
+
+    on_touch:
+      - lambda: |-
+          const int x = touch.x;
+          const int y = touch.y;
+
+          ESP_LOGI(
+            "touch",
+            "Touch x=%d y=%d menu=%s standby=%s notification=%s",
+            x,
+            y,
+            id(mode_menu_open) ? "open" : "closed",
+            id(standby_active) ? "yes" : "no",
+            id(notification_popup_open) ? "open" : "closed"
+          );
+
+          if (id(notification_popup_open)) {
+
+            ESP_LOGI(
+              "thermostat",
+              "Benachrichtigung bestaetigt"
+            );
+
+            id(pulse_notification_acknowledged).execute();
+
+            id(notification_popup_open) = false;
+            id(mode_menu_open) = false;
+            id(last_activity_ms) = millis();
+            id(force_full_redraw) = true;
+
+            id(round_display).update();
+            return;
+          }
+
+          if (id(standby_active)) {
+
+            id(standby_active) = false;
+            id(last_activity_ms) = millis();
+            id(mode_menu_open) = false;
+            id(notification_popup_open) = false;
+            id(force_full_redraw) = true;
+
+            auto light_call =
+                id(display_backlight).turn_on();
+
+            light_call.set_brightness(
+              id(normal_backlight_brightness)
+            );
+
+            light_call.perform();
+
+            ESP_LOGI(
+              "thermostat",
+              "Standby beendet"
+            );
+
+            id(round_display).update();
+            return;
+          }
+
+          id(last_activity_ms) = millis();
+
+          if (!id(mode_menu_open)) {
+
+            id(mode_menu_open) = true;
+
+            ESP_LOGI(
+              "thermostat",
+              "Radiales Modus-Menue geoeffnet"
+            );
+
+            id(round_display).update();
+            return;
+          }
+
+          const int CX = 120;
+          const int CY = 120;
+
+          const int dx = x - CX;
+          const int dy = y - CY;
+
+          const int d2 =
+              dx * dx +
+              dy * dy;
+
+          const int OUTER_R = 106;
+
+          // Absichtlich weiterhin 42:
+          // sichtbarer Mittelkreis = 32,
+          // Touch-Totzone = 42.
+          const int INNER_R = 42;
+
+          const int OUTER_R2 =
+              OUTER_R *
+              OUTER_R;
+
+          const int INNER_R2 =
+              INNER_R *
+              INNER_R;
+
+          if (
+            d2 > OUTER_R2 ||
+            d2 < INNER_R2
+          ) {
+
+            id(mode_menu_open) = false;
+            id(force_full_redraw) = true;
+            id(round_display).update();
+            return;
+          }
+
+          float angle =
+              atan2f(
+                (float) dy,
+                (float) dx
+              ) *
+              180.0f /
+              3.14159265359f;
+
+          if (angle < 0.0f)
+            angle += 360.0f;
+
+          int segment;
+
+          if (
+            angle >= 54.0f &&
+            angle < 126.0f
+          ) {
+            segment = 4;
+          }
+
+          else if (
+            angle >= 126.0f &&
+            angle < 198.0f
+          ) {
+            segment = 3;
+          }
+
+          else if (
+            angle >= 198.0f &&
+            angle < 270.0f
+          ) {
+            segment = 1;
+          }
+
+          else if (
+            angle >= 270.0f &&
+            angle < 342.0f
+          ) {
+            segment = 0;
+          }
+
+          else {
+            segment = 2;
+          }
+
+          if (segment == 4) {
+
+            if (!id(notification_present).state) {
+              ESP_LOGI(
+                "thermostat",
+                "Benachrichtigungssegment inaktiv"
+              );
+              return;
+            }
+
+            id(mode_menu_open) = false;
+            id(notification_popup_open) = true;
+            id(force_full_redraw) = true;
+
+            ESP_LOGI(
+              "thermostat",
+              "Benachrichtigung geoeffnet"
+            );
+
+            id(round_display).update();
+            return;
+          }
+
+          auto call =
+              id(thermostat_climate).make_call();
+
+          if (segment == 0) {
+
+            call.set_mode(
+              climate::CLIMATE_MODE_AUTO
+            );
+
+            ESP_LOGI(
+              "thermostat",
+              "Touch -> AUTO"
+            );
+          }
+
+          else if (segment == 1) {
+
+            call.set_mode(
+              climate::CLIMATE_MODE_HEAT
+            );
+
+            ESP_LOGI(
+              "thermostat",
+              "Touch -> HEAT"
+            );
+          }
+
+          else if (segment == 2) {
+
+            call.set_mode(
+              climate::CLIMATE_MODE_COOL
+            );
+
+            ESP_LOGI(
+              "thermostat",
+              "Touch -> COOL"
+            );
+          }
+
+          else {
+
+            call.set_mode(
+              climate::CLIMATE_MODE_OFF
+            );
+
+            ESP_LOGI(
+              "thermostat",
+              "Touch -> OFF"
+            );
+          }
+
+          id(mode_menu_open) = false;
+          id(force_full_redraw) = true;
+
+          call.perform();
+
+    on_release:
+      - logger.log: "TOUCH released"
+
+sensor:
+  - platform: rotary_encoder
+    id: thermostat_encoder
+    internal: true
+
+    pin_a:
+      number: GPIO45
+      mode:
+        input: true
+        pullup: true
+
+    pin_b:
+      number: GPIO42
+      mode:
+        input: true
+        pullup: true
+
+    resolution: 1
+
+    on_clockwise:
+      then:
+        - lambda: |-
+            if (
+              id(standby_active) ||
+              id(notification_popup_open)
+            ) {
+              return;
+            }
+
+            id(last_activity_ms) = millis();
+
+            float step =
+                id(temperature_step).current_option() == "1.0 °C"
+                ? 1.0f
+                : 0.5f;
+
+            float value =
+                id(thermostat_setpoint) + step;
+
+            if (value > 30.0f)
+              value = 30.0f;
+
+            id(thermostat_setpoint) = value;
+
+            auto call =
+                id(thermostat_climate).make_call();
+
+            call.set_target_temperature(value);
+            call.perform();
+
+            ESP_LOGI(
+              "thermostat",
+              "Encoder CW -> %.1f °C",
+              value
+            );
+
+    on_anticlockwise:
+      then:
+        - lambda: |-
+            if (
+              id(standby_active) ||
+              id(notification_popup_open)
+            ) {
+              return;
+            }
+
+            id(last_activity_ms) = millis();
+
+            float step =
+                id(temperature_step).current_option() == "1.0 °C"
+                ? 1.0f
+                : 0.5f;
+
+            float value =
+                id(thermostat_setpoint) - step;
+
+            if (value < 5.0f)
+              value = 5.0f;
+
+            id(thermostat_setpoint) = value;
+
+            auto call =
+                id(thermostat_climate).make_call();
+
+            call.set_target_temperature(value);
+            call.perform();
+
+            ESP_LOGI(
+              "thermostat",
+              "Encoder CCW -> %.1f °C",
+              value
+            );
+
+climate:
+  - platform: template
+    id: thermostat_climate
+    name: "Temperaturregler Wohnzimmer"
+    optimistic: true
+
+    supported_modes:
+      - "OFF"
+      - HEAT
+      - COOL
+      - AUTO
+
+    restore_mode: RESTORE
+
+    initial_state:
+      mode: AUTO
+      target_temperature: 21.0
+
+    visual:
+      min_temperature: 5.0
+      max_temperature: 30.0
+      temperature_step: 0.5
+
+    set_target_temperature_action:
+      - lambda: |-
+          float value = x;
+
+          if (value < 5.0f)
+            value = 5.0f;
+
+          if (value > 30.0f)
+            value = 30.0f;
+
+          id(thermostat_setpoint) = value;
+
+          ESP_LOGI(
+            "thermostat",
+            "Sollwert -> %.1f °C",
+            value
+          );
+
+      - component.update: round_display
+
+    set_mode_action:
+      - logger.log:
+          format: "Betriebsmodus -> %d"
+          args:
+            - x
+
+      - lambda: |-
+          id(force_full_redraw) = true;
+
+      - component.update: round_display
+
+number:
+  - platform: template
+    id: room_temperature
+    name: "Isttemperatur"
+    optimistic: true
+    restore_value: true
+    min_value: 0
+    max_value: 40
+    step: 0.1
+    unit_of_measurement: "°C"
+    mode: box
+    initial_value: 20.0
+
+    on_value:
+      - component.update: round_display
+
+  - platform: template
+    id: room_humidity
+    name: "Luftfeuchtigkeit"
+    optimistic: true
+    restore_value: true
+    min_value: 0
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    mode: box
+    initial_value: 50
+
+    on_value:
+      - component.update: round_display
+
+  - platform: template
+    id: standby_brightness
+    name: "Standby Helligkeit"
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: 0
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    mode: box
+    initial_value: 20
+
+    on_value:
+      - if:
+          condition:
+            lambda: |-
+              return id(standby_active);
+
+          then:
+            - lambda: |-
+                float level =
+                    x / 100.0f;
+
+                if (level < 0.0f)
+                  level = 0.0f;
+
+                if (level > 1.0f)
+                  level = 1.0f;
+
+                auto light_call =
+                    id(display_backlight).turn_on();
+
+                light_call.set_brightness(
+                  level
+                );
+
+                light_call.perform();
+
+                ESP_LOGI(
+                  "thermostat",
+                  "Standby-Helligkeit -> %.0f%%",
+                  x
+                );
+
+  - platform: template
+    id: standby_timeout
+    name: "Timeout"
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: 0
+    max_value: 1800
+    step: 1
+    unit_of_measurement: "s"
+    mode: box
+    initial_value: 300
+
+text:
+  - platform: template
+    id: notification_text
+    name: "Benachrichtigung"
+    optimistic: true
+    restore_value: true
+    min_length: 0
+    max_length: 255
+    mode: text
+    initial_value: ""
+
+    on_value:
+      - if:
+          condition:
+            lambda: |-
+              return id(notification_popup_open);
+
+          then:
+            - lambda: |-
+                id(force_full_redraw) = true;
+
+            - component.update: round_display
+
+select:
+  - platform: template
+    id: temperature_step
+    name: "Temperatur Schrittweite"
+    entity_category: config
+    optimistic: true
+    restore_value: true
+
+    options:
+      - "0.5 °C"
+      - "1.0 °C"
+
+    initial_option: "0.5 °C"
+
+  - platform: template
+    id: humidity_display
+    name: "Luftfeuchtigkeit Anzeige"
+    entity_category: config
+    optimistic: true
+    restore_value: true
+
+    options:
+      - "An"
+      - "Aus"
+
+    initial_option: "Aus"
+
+    on_value:
+      - lambda: |-
+          id(force_full_redraw) = true;
+
+      - component.update: round_display
+
+  - platform: template
+    id: heating_source
+    name: "Heizquelle"
+    optimistic: true
+    restore_value: true
+
+    options:
+      - "Wärmepumpe"
+      - "Heizkörper"
+      - "Klimaanlage"
+
+    initial_option: "Wärmepumpe"
+
+    on_value:
+      - lambda: |-
+          id(force_full_redraw) = true;
+
+      - component.update: round_display
+
+  - platform: template
+    id: rgb_ring_modus
+    name: "RGB Ring Modus"
+    optimistic: true
+    restore_value: false
+
+    options:
+      - "Dauerlicht"
+      - "Pulsierend"
+
+    initial_option: "Dauerlicht"
+
+    on_value:
+      then:
+        - if:
+            condition:
+              lambda: |-
+                return x == "Pulsierend";
+
+            then:
+              - light.turn_on:
+                  id: rgb_ring
+                  effect: "Pulsierend"
+
+            else:
+              - light.turn_on:
+                  id: rgb_ring
+                  effect: "None"
+
+switch:
+  - platform: template
+    id: window_open
+    name: "Fenster offen"
+    optimistic: false
+    restore_mode: RESTORE_DEFAULT_OFF
+
+    turn_on_action:
+      - lambda: |-
+          id(window_open).publish_state(true);
+          id(force_full_redraw) = true;
+
+      - component.update: round_display
+
+    turn_off_action:
+      - lambda: |-
+          id(window_open).publish_state(false);
+          id(force_full_redraw) = true;
+
+      - component.update: round_display
+
+  - platform: template
+    id: notification_present
+    name: "Benachrichtigung vorhanden"
+    optimistic: false
+    restore_mode: RESTORE_DEFAULT_OFF
+
+    turn_on_action:
+      - lambda: |-
+          id(notification_present).publish_state(true);
+          id(force_full_redraw) = true;
+
+      - component.update: round_display
+
+    turn_off_action:
+      - lambda: |-
+          id(notification_present).publish_state(false);
+          id(force_full_redraw) = true;
+
+      - component.update: round_display
+
+binary_sensor:
+  - platform: template
+    id: notification_acknowledged
+    name: "Benachrichtigung bestätigt"
+
+script:
+  - id: pulse_notification_acknowledged
+    mode: restart
+    then:
+      - binary_sensor.template.publish:
+          id: notification_acknowledged
+          state: ON
+
+      - delay: 500ms
+
+      - binary_sensor.template.publish:
+          id: notification_acknowledged
+          state: OFF
+
+interval:
+  - interval: 1s
+    then:
+      - lambda: |-
+          if (
+            id(standby_active) ||
+            id(notification_popup_open)
+          ) {
+            return;
+          }
+
+          const float timeout_seconds =
+              id(standby_timeout).state;
+
+          if (
+            isnan(timeout_seconds) ||
+            timeout_seconds <= 0.0f
+          ) {
+            return;
+          }
+
+          const uint32_t timeout_ms =
+              (uint32_t) (
+                timeout_seconds *
+                1000.0f
+              );
+
+          const uint32_t now =
+              millis();
+
+          if (
+            (uint32_t) (
+              now -
+              id(last_activity_ms)
+            ) <
+            timeout_ms
+          ) {
+            return;
+          }
+
+          float current_brightness =
+              id(display_backlight)
+                ->remote_values
+                .get_brightness();
+
+          if (
+            current_brightness >
+            0.0f
+          ) {
+            id(normal_backlight_brightness) =
+                current_brightness;
+          }
+
+          id(standby_active) = true;
+          id(mode_menu_open) = false;
+          id(notification_popup_open) = false;
+          id(force_full_redraw) = true;
+
+          float standby_level =
+              id(standby_brightness).state /
+              100.0f;
+
+          if (standby_level < 0.0f)
+            standby_level = 0.0f;
+
+          if (standby_level > 1.0f)
+            standby_level = 1.0f;
+
+          auto light_call =
+              id(display_backlight).turn_on();
+
+          light_call.set_brightness(
+            standby_level
+          );
+
+          light_call.perform();
+
+          ESP_LOGI(
+            "thermostat",
+            "Standby aktiviert: %.0f%%",
+            standby_level * 100.0f
+          );
+
+          id(round_display).update();
+
+output:
+  - platform: ledc
+    id: display_backlight_pwm
+    pin: GPIO46
+    frequency: 5000Hz
+
+  - platform: gpio
+    id: power_light
+    pin: GPIO40
+
+  - platform: gpio
+    id: board_out1
+    pin: GPIO1
+
+  - platform: gpio
+    id: board_out2
+    pin: GPIO2
+
+light:
+  - platform: monochromatic
+    id: display_backlight
+    name: "Display Hintergrundbeleuchtung"
+    output: display_backlight_pwm
+    restore_mode: RESTORE_DEFAULT_ON
+    default_transition_length: 0s
+
+  - platform: esp32_rmt_led_strip
+    id: rgb_ring
+    name: "RGB Ring"
+    pin: GPIO48
+    num_leds: 5
+    chipset: WS2812
+    channel_colors: GRB
+    restore_mode: RESTORE_DEFAULT_OFF
+
+    effects:
+      - pulse:
+          name: "Pulsierend"
+          transition_length: 1s
+          update_interval: 1s
+          min_brightness: 15%
+          max_brightness: 100%
