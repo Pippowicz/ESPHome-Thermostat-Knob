@@ -29,7 +29,10 @@ Features
   reboot
 - Optimized custom-rendered 270° temperature arc using PSRAM lookup
   tables
-Hardware
+
+  
+Hardware:
+
 Designed for the Elecrow ESP32 1.28" HMI IPS Knob with Touch, based
 on an ESP32-S3.
 Pinout
