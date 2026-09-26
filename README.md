@@ -80,6 +80,7 @@ fallback_hotspot_password: "YOUR_FALLBACK_AP_PASSWORD"
 encryption_key: "YOUR_ESPHOME_API_KEY"
 </code>
 
+
 Do not commit secrets.yaml to Git.
 
 Compile and flash the configuration through ESPHome as usual.
