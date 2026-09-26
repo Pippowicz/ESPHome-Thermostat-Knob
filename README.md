@@ -66,26 +66,35 @@ ESPHome currently reports ili9xxx as deprecated. The configuration
 intentionally keeps the known-working implementation rather than
 changing the display driver unnecessarily.
 
-Installation
-Copy:
-esphome-round-thermostat.yaml
+
+Installation:
+Copy esphome-round-thermostat.yaml
 into your ESPHome configuration directory.
+
 Create a secrets.yaml containing your own credentials:
+
+<code>
 wifi_ssid: "YOUR_WIFI_SSID"
 wifi_password: "YOUR_WIFI_PASSWORD"
 fallback_hotspot_password: "YOUR_FALLBACK_AP_PASSWORD"
 encryption_key: "YOUR_ESPHOME_API_KEY"
+</code>
+
 Do not commit secrets.yaml to Git.
-A suitable .gitignore is:
-secrets.yaml
-.esphome/
+
 Compile and flash the configuration through ESPHome as usual.
-Home Assistant entities
+
+
+Home Assistant entities:
+
 The device exposes the main thermostat as a climate entity:
+
 Temperaturregler Wohnzimmer
 The YAML can of course be renamed for another room before installation.
 Additional entities include:
+
   Entity                             Purpose
+  
   Isttemperatur                      Current room temperature supplied
                                      by Home Assistant
   Luftfeuchtigkeit                   Current humidity supplied by Home
@@ -106,10 +115,15 @@ Additional entities include:
   Display Hintergrundbeleuchtung     Display backlight control
   RGB Ring                           RGB LED ring
   RGB Ring Modus                     Static or pulsing RGB ring
+
+
 The temperature and humidity entities are intentionally generic template
 entities. Home Assistant automations can copy values from the actual
 room sensors into them.
-Controls
+
+
+Controls:
+
 Rotary encoder
 Turn the encoder to change the target temperature.
 The increment can be configured as either:
@@ -118,6 +132,7 @@ The increment can be configured as either:
 The target temperature is limited to 5--30 °C.
 Encoder input is ignored while the display is in standby or while a
 notification popup is open.
+
 Touchscreen
 Touch the normal thermostat screen to open the radial operating-mode
 menu.
