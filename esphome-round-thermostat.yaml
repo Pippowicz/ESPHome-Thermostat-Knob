@@ -1960,10 +1960,6 @@ touchscreen:
               dy * dy;
 
           const int OUTER_R = 106;
-
-          // Absichtlich weiterhin 42:
-          // sichtbarer Mittelkreis = 32,
-          // Touch-Totzone = 42.
           const int INNER_R = 42;
 
           const int OUTER_R2 =
@@ -2466,35 +2462,6 @@ select:
           id(force_full_redraw) = true;
 
       - component.update: round_display
-
-  - platform: template
-    id: rgb_ring_modus
-    name: "RGB Ring Modus"
-    optimistic: true
-    restore_value: false
-
-    options:
-      - "Dauerlicht"
-      - "Pulsierend"
-
-    initial_option: "Dauerlicht"
-
-    on_value:
-      then:
-        - if:
-            condition:
-              lambda: |-
-                return x == "Pulsierend";
-
-            then:
-              - light.turn_on:
-                  id: rgb_ring
-                  effect: "Pulsierend"
-
-            else:
-              - light.turn_on:
-                  id: rgb_ring
-                  effect: "None"
 
 switch:
   - platform: template
