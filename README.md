@@ -176,19 +176,26 @@ Current room temperature and optional humidity are displayed below the
 target temperature.
 Status icons at the bottom indicate the selected heating source, an open
 window and pending notifications.
-Rendering performance
+
+
+Rendering performance:
+
 The temperature ring is custom-rendered rather than assembled from
 standard UI widgets.
 To reduce the amount of geometry calculated during normal display
 updates, the configuration precomputes supersampled ring geometry into
 lookup tables stored in ESP32-S3 PSRAM.
+
 The display uses:
 update_interval: never
 auto_clear_enabled: false
 and is explicitly redrawn when relevant values change.
 This substantially reduces unnecessary rendering work while retaining
 antialiased ring geometry.
-RGB ring
+
+
+RGB ring:
+
 The board's five WS2812 LEDs are exposed to Home Assistant.
 Two operating modes are currently provided:
 - Dauerlicht --- static light
@@ -201,19 +208,27 @@ Notes
 GPIO3 and GPIO46 may generate ESPHome strapping-pin warnings. These pins
 are part of the board's existing hardware design and are intentionally
 used.
+
 The CST816D configuration uses its interrupt pin and skip_probe: true.
 The project is designed around this specific Elecrow board. Other round
 ESP32-S3 boards may require changes to the display, touch, encoder,
 PSRAM and GPIO configuration.
-Possible future additions
+
+
+Possible future additions:
+
 The available auxiliary I²C connection makes additional environmental
 sensors possible, for example:
 - BME280 temperature/humidity/pressure sensor
 - Other external room-temperature sensors
+
 The thermostat is primarily intended as a Home Assistant user interface,
 so the actual heating control logic can remain centralized in Home
 Assistant.
-AI-assisted development
+
+
+AI-assisted development:
+
 The complete ESPHome YAML configuration for this project was developed
 with the assistance of OpenAI ChatGPT through an iterative process
 of implementation, testing, debugging and refinement.
@@ -221,15 +236,16 @@ The published YAML is fully AI-generated based on the project
 requirements and hardware information provided during development. It
 was then tested on the actual hardware and iteratively corrected and
 refined according to the test results.
-License
-This project is released under the Apache License 2.0.
-You are free to use, modify and redistribute the project, including for
-commercial purposes, subject to the terms of the Apache License 2.0.
-Copyright, license and attribution notices must be retained as required
-by the license.
-See the LICENSE file for the full license text.
-Attribution
+
+
+License:
+
+This project is released under the CC BY-NC 4.0 – Attribution-NonCommercial 4.0 International
+
+Attribution:
+
 When redistributing this project or substantial portions of it, retain
 the project name, copyright notice and license information.
+
 Development disclosure: the ESPHome YAML was created with the assistance
 of OpenAI ChatGPT and iteratively tested and refined on real hardware.
