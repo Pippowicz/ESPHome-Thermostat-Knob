@@ -2134,10 +2134,32 @@ sensor:
     on_clockwise:
       then:
         - lambda: |-
-            if (
-              id(standby_active) ||
-              id(notification_popup_open)
-            ) {
+            if (id(notification_popup_open)) {
+              return;
+            }
+
+            if (id(standby_active)) {
+              id(standby_active) = false;
+              id(last_activity_ms) = millis();
+              id(mode_menu_open) = false;
+              id(notification_popup_open) = false;
+              id(force_full_redraw) = true;
+
+              auto light_call =
+                  id(display_backlight).turn_on();
+
+              light_call.set_brightness(
+                id(normal_backlight_brightness)
+              );
+
+              light_call.perform();
+
+              ESP_LOGI(
+                "thermostat",
+                "Standby durch Encoder beendet"
+              );
+
+              id(round_display).update();
               return;
             }
 
@@ -2171,10 +2193,32 @@ sensor:
     on_anticlockwise:
       then:
         - lambda: |-
-            if (
-              id(standby_active) ||
-              id(notification_popup_open)
-            ) {
+            if (id(notification_popup_open)) {
+              return;
+            }
+
+            if (id(standby_active)) {
+              id(standby_active) = false;
+              id(last_activity_ms) = millis();
+              id(mode_menu_open) = false;
+              id(notification_popup_open) = false;
+              id(force_full_redraw) = true;
+
+              auto light_call =
+                  id(display_backlight).turn_on();
+
+              light_call.set_brightness(
+                id(normal_backlight_brightness)
+              );
+
+              light_call.perform();
+
+              ESP_LOGI(
+                "thermostat",
+                "Standby durch Encoder beendet"
+              );
+
+              id(round_display).update();
               return;
             }
 
