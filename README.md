@@ -71,8 +71,12 @@ changing the display driver unnecessarily.
 
 
 Installation:
-Copy esphome-round-thermostat.yaml
-into your ESPHome configuration directory.
+Copy esphome-round-thermostat.yaml and the complete components/round_thermostat directory
+into your ESPHome configuration directory. The YAML loads the display and UI logic
+as a local external component.
+
+See [the component documentation](components/round_thermostat/README.md) for directory
+layout, Git-source installation, event wiring and hardware acceptance checks.
 
 Create a secrets.yaml containing your own credentials:
 
@@ -268,3 +272,4 @@ the project name, copyright notice and license information.
 
 Development disclosure: the ESPHome YAML was created with the assistance
 of OpenAI ChatGPT and iteratively tested and refined on real hardware.
+
