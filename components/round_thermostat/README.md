@@ -98,7 +98,8 @@ rendering before the boot initialization completes.
 
 ## Hardware acceptance checks
 
-Before treating the refactor as production-ready, check on the physical knob:
+The extracted component has been tested successfully on the project owner's knob.
+Repeat these checks when changing firmware behavior:
 
 1. Reboot and confirm restored climate mode, target and display settings.
 2. Compare normal, off, standby, radial-menu and notification screens.
@@ -116,5 +117,5 @@ The original repository declares CC BY-NC 4.0 (Attribution-NonCommercial 4.0
 International); the extracted code retains that license.
 
 The original YAML was developed with OpenAI ChatGPT and tested on real hardware,
-as documented upstream. This component extraction was AI-assisted; its hardware
-acceptance checks still require testing on the device.
+as documented upstream. This component extraction was AI-assisted and subsequently tested successfully
+by the project owner on the physical knob.
