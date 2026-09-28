@@ -11,6 +11,7 @@
 #include "esphome/components/switch/switch.h"
 #include "esphome/components/text/text.h"
 #include "esphome/core/component.h"
+#include "remote_climate_state.h"
 
 namespace esphome::round_thermostat {
 
@@ -18,7 +19,12 @@ class RoundThermostat : public PollingComponent {
 public:
   RoundThermostat() : PollingComponent(1000) {}
   ~RoundThermostat();
+  void setup() override;
   void start();
+  void set_mode(climate::ClimateMode mode);
+  void set_source_entity(const std::string &entity) {
+    this->source_entity_ = entity;
+  }
   void loop() override;
   void update() override;
   void render(display::Display &it);
@@ -126,6 +132,20 @@ public:
   }
 
 protected:
+  void render_screen_(display::Display &it);
+  void ha_loop_();
+  void publish_remote_();
+  void send_ha_action_(const char *action, const char *key,
+                       const std::string &value);
+  bool request_ha_target_(float value);
+  bool request_ha_mode_(climate::ClimateMode mode);
+  float room_temperature_value_() const;
+  float room_humidity_value_() const;
+  std::string source_entity_;
+  RemoteClimateState remote_;
+  bool remote_dirty_{false};
+  const char *ha_status_() const;
+
   void wake_();
   void acknowledge_notification_();
   bool started_{false};

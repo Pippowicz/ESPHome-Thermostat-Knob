@@ -17,6 +17,7 @@ entities are configured in YAML.
 - [Features](#features)
 - [Requirements](#requirements)
 - [Installation](#installation)
+- [Thermostat data source](#thermostat-data-source)
 - [Controls and screens](#controls-and-screens)
 - [Home Assistant integration](#home-assistant-integration)
 - [Hardware and pinout](#hardware-and-pinout)
@@ -38,10 +39,11 @@ Assistant automation can use surplus PV power for heating with the air
 conditioner while reducing radiator demand.
 
 **This repository currently implements the knob interface.** PV-based source
-selection, radiator setback, fallback behavior and bidirectional setpoint
-synchronization are not implemented here. Selecting Auto, Heat or Cool does not
-by itself control either heating system. The heating-source selection currently
-changes a display icon.
+selection, radiator setback and fallback behavior are not implemented here.
+In standalone mode, selecting Auto, Heat or Cool only changes the knob's climate
+entity. The optional linked mode directly controls one existing HA climate
+entity; it does not implement the planned coordination between heating sources.
+The heating-source selection currently changes a display icon.
 
 Runtime communication uses the local ESPHome API. Building the firmware may
 require internet access to download dependencies, fonts, icons and, when using
@@ -126,7 +128,9 @@ esphome/
     └── round_thermostat/
         ├── __init__.py
         ├── round_thermostat.h
-        └── round_thermostat.cpp
+        ├── round_thermostat.cpp
+        ├── round_thermostat_ha.cpp
+        └── remote_climate_state.h
 ```
 
 This option uses the component files on disk rather than fetching them from Git.
@@ -159,6 +163,95 @@ esphome compile esphome-round-thermostat.yaml
 
 Flash using the method appropriate for your device, then add it through the
 ESPHome integration in Home Assistant.
+
+## Thermostat data source
+
+Choose the mode with the substitution at the top of the YAML, then compile and
+flash. This is a build-time selection, not a runtime dropdown.
+
+### Standalone (default)
+
+```yaml
+substitutions:
+  thermostat_entity: "false"
+```
+
+This retains the original independent climate entity, restored setpoint, 5–30 °C
+range and writable temperature/humidity display inputs. Existing HA automations
+can keep using those inputs. No remote climate state subscriptions or control
+actions are created. A YAML boolean `false` is also accepted; the quoted form
+makes the substitution explicit.
+
+### Link an existing Home Assistant thermostat
+
+```yaml
+substitutions:
+  thermostat_entity: "climate.hmip_heating_int0000008"
+```
+
+Use the actual entity ID of the thermostat to control. **Do not select the knob's
+own climate entity**, and remove any separate two-way synchronization automation
+between the same two entities to avoid competing controllers.
+
+For testing this feature, load both the YAML and component from `development`.
+When loading from Git, set `ref: development` in `external_components`.
+
+The component subscribes to the selected entity through the local ESPHome API:
+
+| HA state / attribute | Use |
+| --- | --- |
+| Entity state | Operating mode: `off`, `heat`, `cool`, `auto` |
+| `temperature` | Single target temperature |
+| `current_temperature` | Room temperature |
+| `current_humidity` | Room humidity, if the source provides it |
+| `min_temp`, `max_temp` | Target limits and display arc range |
+| `target_temp_step` | Target rounding; defaults to 0.5 °C if absent |
+| `hvac_modes` | Allowed mode commands; unsupported menu labels are dimmed |
+
+Turn the knob to send `climate.set_temperature`; select a mode to send
+`climate.set_hvac_mode`. Changes made in HA or at the source thermostat return to
+the knob automatically. Incoming reports update the local climate state directly
+and never invoke another outbound command. An `off` report with a target of
+4.5 °C, for example, is preserved as a source report rather than sent back as a
+new room-temperature request.
+
+In Home Assistant, open **Settings → Devices & services → ESPHome**, configure
+the knob's integration entry, and enable **Allow the device to perform Home
+Assistant actions**. Reading states alone does not require this option, but
+controlling the source does. See the [ESPHome API documentation](https://esphome.io/components/api/#actions).
+
+The existing `Isttemperatur` and `Luftfeuchtigkeit` number entities remain present
+for compatibility, but are not used by the display in linked mode. The humidity
+display switch still controls visibility. Window status, notifications, the
+heating-source icon and RGB settings remain independent of the linked climate.
+
+**Availability and command handling:**
+
+- Missing or invalid temperature/humidity values display as `--` rather than
+  using persisted standalone values. Humidity is not available on every climate
+  entity; it is not inferred from unrelated room entities.
+- A lost HA subscription shows `HA offline`; an unknown/unavailable source shows
+  `HA wartet`. Commands are blocked until the source is available. Unsent commands
+  are discarded on disconnect and are not replayed after reconnecting.
+- Rapid temperature changes are combined for 250 ms before sending the latest
+  value. The requested value is shown while waiting for HA confirmation.
+- If confirmation does not arrive within five seconds, the knob restores the
+  latest reported state and shows `HA Fehler`. Check HA action permissions and
+  device availability. A late report still updates the values; a new command
+  clears the error indicator.
+- `HA Daten` means the single target or temperature limits are missing. `HA Modus`
+  means the current source mode cannot be represented by this UI.
+
+The current UI supports **Celsius, single-setpoint thermostats**. `heat_cool`
+(two target temperatures), `dry` and `fan_only` are not mapped to Auto. A supported
+mode can still be selected if offered by the source. Source limits and rounding
+apply even when the encoder is configured for a different increment. The encoder
+uses at least the source's step size so both directions remain usable.
+
+Linking a physical radiator thermostat makes its actual setpoint authoritative,
+including temporary setbacks. To keep a separate room wish for future hybrid
+heating control, retain standalone mode or link a suitable virtual HA climate
+entity instead.
 
 ## Controls and screens
 
@@ -246,12 +339,12 @@ on your Home Assistant setup.
 | Display Hintergrundbeleuchtung | Light | Display backlight |
 | RGB Ring | Light | RGB color, brightness and pulse effect |
 
-`Isttemperatur` and `Luftfeuchtigkeit` are writable template numbers, not onboard
+In standalone mode, `Isttemperatur` and `Luftfeuchtigkeit` are writable template numbers, not onboard
 sensor readings. Home Assistant must copy measurements into them. They are
 display inputs and are not currently wired as the climate entity's measured
 temperature/humidity.
 
-The knob preserves these inputs across restarts. It does not yet detect stale
+In standalone mode, the knob preserves these inputs across restarts. It does not yet detect stale
 measurements or indicate when Home Assistant has stopped updating them.
 
 ## Hardware and pinout
@@ -317,11 +410,27 @@ Changing a Git reference alone does not alter the firmware already on the device
 - Notification text wraps by byte count rather than measured pixel width;
   long words and UTF-8 truncation need improvement.
 - Encoder behavior while the mode menu is open may be refined.
-- Stale room-temperature and humidity inputs are not detected.
+- Standalone room-temperature and humidity inputs have no freshness detection.
+  Linked mode detects HA disconnection and unavailable states, but cannot detect
+  a source integration that continues reporting stale measurements as valid.
 - Additional local sensors may be connected through the auxiliary I²C pins.
 - Heating-source coordination and safe bidirectional synchronization are future
   Home Assistant work, including separating the desired room setpoint from a
   temporary radiator setback.
+
+### Automated checks
+
+The transport-independent synchronization state can be tested without hardware:
+
+```sh
+g++ -std=c++17 -Wall -Wextra -Werror tests/test_remote_climate_state.cpp -o /tmp/test-remote-climate
+/tmp/test-remote-climate
+```
+
+Before accepting a linked-mode change, test startup, both directions of control,
+missing humidity, HA disconnection/reconnection and denied HA action permission.
+Confirm that switching the substitution back to `"false"` preserves standalone
+operation.
 
 ## AI-assisted development
 
@@ -339,3 +448,4 @@ When redistributing the project or substantial portions of it, retain the projec
 name, copyright notices and license information.
 
 **Attribution:** ESPHome Round Thermostat / ESPHome-Thermostat-Knob by Pippowicz.
+

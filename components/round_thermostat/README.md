@@ -18,7 +18,9 @@ esphome/
     └── round_thermostat/
         ├── __init__.py
         ├── round_thermostat.h
-        └── round_thermostat.cpp
+        ├── round_thermostat.cpp
+        ├── round_thermostat_ha.cpp
+        └── remote_climate_state.h
 ```
 
 The supplied YAML uses a local external component, so no component download is
@@ -72,7 +74,8 @@ The example YAML includes all required calls:
 | Touch | `touch(touch.x, touch.y)` |
 | Encoder clockwise / anticlockwise | `rotate(1)` / `rotate(-1)` |
 | Climate target action | `set_target_temperature(x)` |
-| Climate mode or layout change | `redraw(true)` |
+| Climate mode action | `set_mode(x)` |
+| Layout change | `redraw(true)` |
 | Room temperature/humidity update | `redraw()` |
 | Notification text update | `notification_changed()` |
 | Standby brightness update | `standby_brightness_changed(x)` |
@@ -94,7 +97,26 @@ rendering before the boot initialization completes.
   limit. Improved wrapping remains a separate future change.
 - Notification acknowledgement does not clear the notification text or flag.
 - An open notification popup prevents automatic standby.
-- No changes to heating-source coordination or bidirectional HA synchronization.
+- Standalone behavior remains the default. Optional linked climate control is
+  described below; multi-source heating coordination remains outside the UI.
+
+## Optional HA source
+
+`source_entity` accepts `false` (default) or a `climate.<entity>` ID. The example
+YAML binds it to `${thermostat_entity}`. See the root
+[configuration guide](../../README.md#thermostat-data-source) for setup, supported
+attributes, HA action permission and behavior on missing data.
+
+`round_thermostat_ha.cpp` subscribes through the native API and forwards explicit
+user requests. Reports use `publish_state()`, not `make_call()`, so they do not
+re-enter the template's command actions. `remote_climate_state.h` owns pending
+requests, debounce, acknowledgement and timeout behavior independently of the
+transport. Startup never sends restored state back to HA.
+
+The default `false` configuration does not enable the additional HA subscription
+or action API code. The component requires `api`, already present in the example.
+The YAML must call `set_mode(x)` in its climate action for mode forwarding; using
+an old YAML with only `redraw(true)` will not forward mode changes.
 
 ## Hardware acceptance checks
 
@@ -109,6 +131,13 @@ Repeat these checks when changing firmware behavior:
 6. Update temperature, humidity, mode and icons from Home Assistant.
 7. Open and acknowledge a notification; confirm the approximately 500 ms pulse.
 8. Confirm the RGB ring and its pulse effect still work after reboot.
+9. With `thermostat_entity` set, test both directions of target/mode control and
+   confirm no repeating service calls occur from HA feedback.
+10. Check a source without humidity, an unsupported mode, and HA unavailable or
+    disconnected. Reconnect and verify no old commands are replayed.
+11. Disable HA action permission: after an unconfirmed command, the UI must return
+    to the reported value with an error indication. Re-enable permission and retry.
+12. Rebuild with `thermostat_entity: "false"` and verify standalone behavior.
 
 ## Attribution and license
 
@@ -119,3 +148,4 @@ International); the extracted code retains that license.
 The original YAML was developed with OpenAI ChatGPT and tested on real hardware,
 as documented upstream. This component extraction was AI-assisted and subsequently tested successfully
 by the project owner on the physical knob.
+

@@ -1,3 +1,7 @@
+substitutions:
+  # "false": independent knob; otherwise an existing HA climate entity.
+  thermostat_entity: "false" # e.g. "climate.hmip_heating_int0000008"
+
 # Local component; copy the components directory alongside this YAML.
 external_components:
   - source:
@@ -7,6 +11,7 @@ external_components:
 
 round_thermostat:
   id: thermostat_ui
+  source_entity: ${thermostat_entity}
   round_display: round_display
   thermostat_climate: thermostat_climate
   display_backlight: display_backlight
@@ -324,7 +329,7 @@ climate:
     set_target_temperature_action:
       - lambda: id(thermostat_ui).set_target_temperature(x);
     set_mode_action:
-      - lambda: id(thermostat_ui).redraw(true);
+      - lambda: id(thermostat_ui).set_mode(x);
 
 number:
   - platform: template
@@ -528,4 +533,5 @@ light:
           update_interval: 1s
           min_brightness: 15%
           max_brightness: 100%
+
 

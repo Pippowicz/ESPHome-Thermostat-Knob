@@ -26,6 +26,7 @@ void RoundThermostat::redraw(bool full) {
 }
 
 void RoundThermostat::loop() {
+  this->ha_loop_();
   // Draw after entity actions have finished publishing their new states.
   if (this->started_ && this->redraw_pending_) {
     this->redraw_pending_ = false;
@@ -45,6 +46,10 @@ void RoundThermostat::start() {
   this->mode_menu_open_ = false;
   this->notification_popup_open_ = false;
   this->force_full_redraw_ = true;
+  if (!this->source_entity_.empty()) {
+    this->thermostat_setpoint_ = this->remote_.target();
+    this->remote_dirty_ = true;
+  }
   this->started_ = true;
   this->redraw(true);
 }
@@ -71,6 +76,11 @@ void RoundThermostat::rotate(int direction) {
   const float step =
       this->temperature_step_->current_option() == "1.0 °C" ? 1.0f : 0.5f;
   float value = this->thermostat_setpoint_ + (direction > 0 ? step : -step);
+  if (!this->source_entity_.empty()) {
+    if (this->request_ha_target_(this->remote_.encoder_target(direction, step)))
+      this->redraw();
+    return;
+  }
   value = std::max(5.0f, std::min(30.0f, value));
   this->thermostat_setpoint_ = value;
   auto call = this->thermostat_climate_->make_call();
@@ -79,8 +89,24 @@ void RoundThermostat::rotate(int direction) {
 }
 
 void RoundThermostat::set_target_temperature(float value) {
+  if (!this->source_entity_.empty()) {
+    this->request_ha_target_(value);
+    // Even rejected commands must restore the template's optimistic local
+    // state.
+    this->remote_dirty_ = true;
+    return;
+  }
   this->thermostat_setpoint_ = std::max(5.0f, std::min(30.0f, value));
   this->redraw();
+}
+
+void RoundThermostat::set_mode(climate::ClimateMode mode) {
+  if (!this->source_entity_.empty()) {
+    this->request_ha_mode_(mode);
+    this->remote_dirty_ = true;
+    return;
+  }
+  this->redraw(true);
 }
 
 void RoundThermostat::acknowledge_notification_() {
@@ -301,10 +327,27 @@ void RoundThermostat::update() {
 }
 
 void RoundThermostat::render(display::Display &it) {
+  this->render_screen_(it);
+  if (this->started_ && !this->source_entity_.empty() &&
+      !this->notification_popup_open_) {
+    const char *status = this->ha_status_();
+    if (status != nullptr)
+      it.print(120, 224, this->menu_font_, Color(230, 160, 60),
+               TextAlign::CENTER, status);
+  }
+}
+
+void RoundThermostat::render_screen_(display::Display &it) {
   if (!this->started_)
     return;
-  const float MIN_TEMP = 5.0f;
-  const float MAX_TEMP = 30.0f;
+  const float MIN_TEMP =
+      !this->source_entity_.empty() && this->remote_.range_valid()
+          ? this->remote_.minimum
+          : 5.0f;
+  const float MAX_TEMP =
+      !this->source_entity_.empty() && this->remote_.range_valid()
+          ? this->remote_.maximum
+          : 30.0f;
   const float SET_TEMP = this->thermostat_setpoint_;
 
   const int WIDTH = 240;
@@ -696,12 +739,16 @@ void RoundThermostat::render(display::Display &it) {
                STANDBY_COLOR, STANDBY_BG);
     }
 
-    if (standby_mode == climate::CLIMATE_MODE_OFF) {
+    if (standby_mode == climate::CLIMATE_MODE_OFF &&
+        (this->source_entity_.empty() || this->remote_.ready())) {
       it.print(120, 125, this->standby_temperature_font_, STANDBY_COLOR,
                TextAlign::CENTER, "Off");
     } else {
       it.printf(120, 125, this->standby_temperature_font_, STANDBY_COLOR,
-                TextAlign::CENTER, "%.1f °C", this->room_temperature_->state);
+                TextAlign::CENTER,
+                std::isfinite(this->room_temperature_value_()) ? "%.1f °C"
+                                                               : "-- °C",
+                this->room_temperature_value_());
     }
 
     if (this->notification_present_->state) {
@@ -840,32 +887,47 @@ void RoundThermostat::render(display::Display &it) {
     it.image(164, 59, this->mode_auto_icon_, ImageAlign::CENTER, MODE_AUTO,
              mode == climate::CLIMATE_MODE_AUTO ? AUTO_BG : MENU_NORMAL);
 
-    it.print(164, 82, this->menu_font_,
-             mode == climate::CLIMATE_MODE_AUTO ? MODE_AUTO : TEXT_NORMAL,
-             TextAlign::CENTER, "Auto");
+    it.print(
+        164, 82, this->menu_font_,
+        (!this->source_entity_.empty() &&
+         !this->remote_.supports(RemoteClimateState::Mode::AUTO))
+            ? Color(85, 85, 85)
+            : (mode == climate::CLIMATE_MODE_AUTO ? MODE_AUTO : TEXT_NORMAL),
+        TextAlign::CENTER, "Auto");
 
     // HEIZEN
     it.image(76, 59, this->mode_heat_icon_, ImageAlign::CENTER, MODE_HEAT,
              mode == climate::CLIMATE_MODE_HEAT ? HEAT_BG : MENU_NORMAL);
 
-    it.print(76, 82, this->menu_font_,
-             mode == climate::CLIMATE_MODE_HEAT ? MODE_HEAT : TEXT_NORMAL,
-             TextAlign::CENTER, "Heizen");
+    it.print(
+        76, 82, this->menu_font_,
+        (!this->source_entity_.empty() &&
+         !this->remote_.supports(RemoteClimateState::Mode::HEAT))
+            ? Color(85, 85, 85)
+            : (mode == climate::CLIMATE_MODE_HEAT ? MODE_HEAT : TEXT_NORMAL),
+        TextAlign::CENTER, "Heizen");
 
     // KÜHLEN
     it.image(191, 143, this->mode_cool_icon_, ImageAlign::CENTER, MODE_COOL,
              mode == climate::CLIMATE_MODE_COOL ? COOL_BG : MENU_NORMAL);
 
-    it.print(184, 166, this->menu_font_,
-             mode == climate::CLIMATE_MODE_COOL ? MODE_COOL : TEXT_NORMAL,
-             TextAlign::CENTER, "Kühlen");
+    it.print(
+        184, 166, this->menu_font_,
+        (!this->source_entity_.empty() &&
+         !this->remote_.supports(RemoteClimateState::Mode::COOL))
+            ? Color(85, 85, 85)
+            : (mode == climate::CLIMATE_MODE_COOL ? MODE_COOL : TEXT_NORMAL),
+        TextAlign::CENTER, "Kühlen");
 
     // AUS
     it.image(49, 143, this->mode_off_icon_, ImageAlign::CENTER, MODE_OFF,
              mode == climate::CLIMATE_MODE_OFF ? OFF_BG : MENU_NORMAL);
 
     it.print(54, 166, this->menu_font_,
-             mode == climate::CLIMATE_MODE_OFF ? MODE_OFF : TEXT_NORMAL,
+             (!this->source_entity_.empty() &&
+              !this->remote_.supports(RemoteClimateState::Mode::OFF))
+                 ? Color(85, 85, 85)
+                 : (mode == climate::CLIMATE_MODE_OFF ? MODE_OFF : TEXT_NORMAL),
              TextAlign::CENTER, "Aus");
 
     // BENACHRICHTIGUNG
@@ -881,7 +943,9 @@ void RoundThermostat::render(display::Display &it) {
   // NORMALER THERMOSTAT-SCREEN
   // ==========================================================
 
-  float normalized = (SET_TEMP - MIN_TEMP) / (MAX_TEMP - MIN_TEMP);
+  float normalized =
+      (std::isfinite(SET_TEMP) ? (SET_TEMP - MIN_TEMP) / (MAX_TEMP - MIN_TEMP)
+                               : 0.0f);
 
   if (normalized < 0.0f)
     normalized = 0.0f;
@@ -1072,19 +1136,21 @@ void RoundThermostat::render(display::Display &it) {
 
   it.filled_rectangle(50, 84, 140, 52, BG);
 
-  if (climate_mode == climate::CLIMATE_MODE_OFF) {
+  if (climate_mode == climate::CLIMATE_MODE_OFF &&
+      (this->source_entity_.empty() || this->remote_.ready())) {
     it.print(CX, CY - 15, this->thermostat_font_, Color(255, 255, 255),
              TextAlign::CENTER, "Off");
   } else {
     it.printf(CX, CY - 15, this->thermostat_font_, Color(255, 255, 255),
-              TextAlign::CENTER, "%.1f °C", SET_TEMP);
+              TextAlign::CENTER, std::isfinite(SET_TEMP) ? "%.1f °C" : "-- °C",
+              SET_TEMP);
   }
 
   // ==========================================================
   // ISTTEMPERATUR + LUFTFEUCHTIGKEIT
   // ==========================================================
 
-  const float ROOM_TEMP = this->room_temperature_->state;
+  const float ROOM_TEMP = this->room_temperature_value_();
 
   const bool SHOW_HUMIDITY = this->humidity_display_->current_option() == "An";
 
@@ -1107,15 +1173,17 @@ void RoundThermostat::render(display::Display &it) {
              ROOM_COLOR, BG);
 
     it.printf(65, 151, this->room_temperature_font_, ROOM_COLOR,
-              TextAlign::CENTER_LEFT, "%.1f °C", ROOM_TEMP);
+              TextAlign::CENTER_LEFT,
+              std::isfinite(ROOM_TEMP) ? "%.1f °C" : "-- °C", ROOM_TEMP);
 
-    const float ROOM_HUMIDITY = this->room_humidity_->state;
+    const float ROOM_HUMIDITY = this->room_humidity_value_();
 
     it.image(142, 153, this->room_humidity_icon_, ImageAlign::CENTER,
              ROOM_COLOR, BG);
 
     it.printf(158, 151, this->room_temperature_font_, ROOM_COLOR,
-              TextAlign::CENTER_LEFT, "%.0f%%", ROOM_HUMIDITY);
+              TextAlign::CENTER_LEFT,
+              std::isfinite(ROOM_HUMIDITY) ? "%.0f%%" : "--%%", ROOM_HUMIDITY);
 
   } else {
 
@@ -1123,7 +1191,8 @@ void RoundThermostat::render(display::Display &it) {
              ROOM_COLOR, BG);
 
     it.printf(100, 151, this->room_temperature_font_, ROOM_COLOR,
-              TextAlign::CENTER_LEFT, "%.1f °C", ROOM_TEMP);
+              TextAlign::CENTER_LEFT,
+              std::isfinite(ROOM_TEMP) ? "%.1f °C" : "-- °C", ROOM_TEMP);
   }
 
   // ==========================================================
