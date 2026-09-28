@@ -7,6 +7,11 @@ on the touchscreen, and display room conditions and notifications. The UI is
 implemented as an ESPHome external component; hardware and Home Assistant
 entities are configured in YAML.
 
+The device YAML loads the display component, icons and fonts from Git. You only
+need that YAML and your secrets locally; optional substitutions customize the
+assets without editing the packages. The device YAML includes German comments
+explaining configuration, hardware and UI connections.
+
 <p align="center">
   <img src="images/thermostat-main.jpg" alt="Main thermostat screen with temperature arc" width="420">
 </p>
@@ -17,6 +22,8 @@ entities are configured in YAML.
 - [Features](#features)
 - [Requirements](#requirements)
 - [Installation](#installation)
+- [Migrating an existing configuration](#migrating-an-existing-configuration)
+- [Understanding the device YAML](#understanding-the-device-yaml)
 - [Thermostat data source](#thermostat-data-source)
 - [Controls and screens](#controls-and-screens)
 - [Home Assistant integration](#home-assistant-integration)
@@ -47,12 +54,15 @@ The heating-source selection currently changes a display icon.
 
 Runtime communication uses the local ESPHome API. Building the firmware may
 require internet access to download dependencies, fonts, icons and, when using
-the Git installation option, the external component.
+the Git installation option, the external component and YAML packages.
 
 ## Features
 
 - Round 240 × 240 GC9A01A display and CST816D capacitive touchscreen.
-- Rotary temperature adjustment from **5 to 30 °C**, in **0.5 or 1.0 °C** steps.
+- Standalone rotary adjustment from **5 to 30 °C**, in **0.5 or 1.0 °C** steps;
+  linked mode respects the source thermostat's limits and step.
+- Optional bidirectional control of an existing HA climate entity.
+- Git-loaded icon/font packages with defaults and individual substitutions.
 - Home Assistant climate entity with Auto, Heat, Cool and Off modes.
 - Radial touch menu and a custom antialiased 270° temperature arc.
 - Room-temperature display and optional humidity display.
@@ -173,6 +183,48 @@ esphome compile esphome-round-thermostat.yaml
 
 Flash using the method appropriate for your device, then add it through the
 ESPHome integration in Home Assistant.
+
+## Migrating an existing configuration
+
+Keep your existing secrets, room/device names and chosen `thermostat_entity`.
+The simplest migration is to copy the new base YAML and reapply those settings.
+If your YAML has other customizations, migrate it in place:
+
+1. Add `project_ref: development` to the existing `substitutions:` block.
+2. Copy the new `external_components:` and `packages:` blocks from the base YAML.
+3. Remove the old inline `image:` and `font:` blocks, which are now supplied by
+   the packages. Retain any unrelated custom assets with unique IDs.
+4. Convert your customized icons/fonts into substitutions using the
+   [complete defaults table](packages/README.md). Leave the component ID mappings intact.
+5. Validate, compile and flash. Check the main screen, menu, standby and a
+   notification, especially if you changed asset sizes or fonts.
+
+Do not merge another top-level `substitutions:` block into an existing one:
+add the entries to the block already present. Existing installations continue
+running their old firmware until you flash an update.
+
+## Understanding the device YAML
+
+| Block | Purpose | Usually customize? |
+| --- | --- | --- |
+| `substitutions` | Climate source, Git revision and optional asset overrides | Yes |
+| `external_components` | Downloads the C++ UI component | Only for local installation |
+| `packages` | Downloads icon/font definitions and defaults | Only for local installation |
+| `round_thermostat` | Connects the UI to the configured entity, display and asset IDs | Usually keep mappings |
+| `esphome`, `wifi`, `api`, `ota` | Device identity, connectivity and updates | Names and secrets |
+| `esp32`, `psram`, `i2c`, `spi`, `display`, `touchscreen`, `output` | Board hardware and drivers | Only for different hardware |
+| `sensor` | Rotary encoder events | Usually keep |
+| `climate` | Knob's local thermostat entity and UI command callbacks | Room name |
+| `number`, `text`, `select`, `switch`, `binary_sensor`, `light` | Display inputs, settings, status, notifications and lights | Use through HA |
+
+In `room_humidity_icon: room_humidity_icon`, the left side is a component
+parameter and the right side is an ESPHome ID. The actual icon is configured
+in the package. Change `humidity_icon` or `humidity_icon_size` in substitutions
+to customize it; changing the binding is unnecessary.
+
+Even when linked to HA, `thermostat_climate` is the local knob entity, while
+`source_entity` is the HA entity being controlled. They serve different roles
+and must not reference the knob's own HA entity as its remote source.
 
 ## Thermostat data source
 
@@ -386,7 +438,7 @@ The auxiliary I²C pins are available for future sensors such as a BME280.
 
 | Path | Contents |
 | --- | --- |
-| [esphome-round-thermostat.yaml](esphome-round-thermostat.yaml) | Hardware, assets, HA entities and UI event wiring |
+| [esphome-round-thermostat.yaml](esphome-round-thermostat.yaml) | Commented device configuration, package imports, HA entities and UI wiring |
 | [components/round_thermostat/](components/round_thermostat/) | ESPHome schema and C++ UI implementation |
 | [packages/](packages/) | Icon and font definitions with overridable defaults |
 | [Component documentation](components/round_thermostat/README.md) | API/event wiring and hardware test checklist |
@@ -406,14 +458,15 @@ Changes are committed to **development** and proposed in a pull request to
 **main**. The maintainer tests the development version on the knob and merges
 the PR when the result is satisfactory.
 
-For testing, use the YAML from `development` with `ref: development` (or matching
-local component files). Review the
+For testing, use the YAML from `development` with `project_ref: development`
+(or matching local component and package files). Review the
 [hardware checklist](components/round_thermostat/README.md#hardware-acceptance-checks)
 when firmware behavior changes.
 
-To return to an earlier version, use its matching YAML and component files, or
-pin the component's `ref` to that version's full commit SHA, then compile and
-flash again. A revert commit can also undo a change on the development branch.
+To return to an earlier version, use its matching YAML, component and packages,
+or set `project_ref` to that version's full commit SHA, then compile and flash
+again. Revisions before the package extraction require their original YAML
+with inline assets. A revert commit can also undo a change on the development branch.
 Changing a Git reference alone does not alter the firmware already on the device.
 
 ## Known limitations and future work

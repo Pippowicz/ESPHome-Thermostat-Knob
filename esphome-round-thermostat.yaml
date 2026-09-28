@@ -1,17 +1,31 @@
+# Gerätekonfiguration für den Elecrow ESP32-S3 Knob mit 240 x 240 Pixeln.
+# Gerätenamen unten anpassen; Zugangsdaten stehen ausschließlich in secrets.yaml.
 substitutions:
-  # "false": independent knob; otherwise an existing HA climate entity.
+  # "false": autarker Betrieb. Alternativ die ID einer vorhandenen HA-Climate-Entität.
+  # Im HA-Modus am ESPHome-Gerät die Ausführung von HA-Aktionen erlauben.
   thermostat_entity: "false"
+  # Gemeinsamer Branch oder Commit für Komponente, Icons und Schriften.
   project_ref: development
 
-# Keep component and asset packages on the same branch or commit.
+  # Optionale Overrides: Ohne diese Angaben gelten die Defaults der Packages.
+  # Alle Möglichkeiten und Standardwerte: packages/README.md
+  # humidity_icon: "mdi:water-percent"
+  # humidity_icon_size: "32x32"
+  # font_file: "gfonts://Roboto"
+  # thermostat_font_size: "40"
+  # menu_font_file: "gfonts://Open Sans"
+
+# Lädt die C++-Displaylogik. Änderungen werden erst nach Kompilieren/Flashen aktiv.
 external_components:
   - source:
       type: git
       url: https://github.com/Pippowicz/ESPHome-Thermostat-Knob
       ref: ${project_ref}
     components: [round_thermostat]
-    refresh: 0s
+    refresh: 0s # Git bei jeder Validierung bzw. jedem Build auf Änderungen prüfen.
 
+# Lädt die image:- und font:-Definitionen samt überschreibbaren Defaults.
+# external_components allein lädt keine YAML-Packages. Keine doppelten Asset-IDs anlegen.
 packages:
   thermostat_assets:
     url: https://github.com/Pippowicz/ESPHome-Thermostat-Knob
@@ -21,14 +35,20 @@ packages:
       - packages/fonts.yaml
     refresh: 0s
 
+# Verknüpfung der Displaylogik mit den unten bzw. in den Packages definierten IDs.
+# Links steht der Komponentenparameter, rechts die ID des verwendeten Bausteins.
+# Icons/Fonts über Substitutions ändern; diese ID-Zuordnungen normalerweise beibehalten.
 round_thermostat:
   id: thermostat_ui
   source_entity: ${thermostat_entity}
+  # Display, lokale Climate-Entität und Hintergrundbeleuchtung.
   round_display: round_display
   thermostat_climate: thermostat_climate
   display_backlight: display_backlight
+  # Messwert-Eingaben für den autarken Betrieb; HA-Modus liest Werte aus der Quelle.
   room_temperature: room_temperature
   room_humidity: room_humidity
+  # Laufzeit-Einstellungen und Statusanzeigen aus Home Assistant.
   standby_brightness: standby_brightness
   standby_timeout: standby_timeout
   temperature_step: temperature_step
@@ -38,6 +58,7 @@ round_thermostat:
   notification_present: notification_present
   notification_text: notification_text
   notification_acknowledged: notification_acknowledged
+  # Diese Schriften und Icons werden von den Packages bereitgestellt.
   thermostat_font: thermostat_font
   standby_temperature_font: standby_temperature_font
   room_temperature_font: room_temperature_font
@@ -59,10 +80,12 @@ round_thermostat:
   window_open_icon: window_open_icon
   notification_icon: notification_icon
 
+# Diese Namen sowie climate.name an den jeweiligen Raum anpassen.
 esphome:
   name: temperaturregler-wohnzimmer
   friendly_name: Temperaturregler Wohnzimmer
   on_boot:
+    # UI nach der Komponenteninitialisierung und Wiederherstellung starten.
     priority: -100
     then:
       - logger.log: "Display backlight restored"
@@ -73,27 +96,33 @@ esphome:
       - lambda: |-
           id(thermostat_ui).start();
 
+# Hardware-Einstellungen und Pins gehören zum angegebenen Elecrow-Board.
 esp32:
   board: esp32-s3-devkitc-1
   variant: ESP32S3
   framework:
     type: esp-idf
 
+# Externer RAM wird unter anderem für die vorberechnete Displaygrafik benötigt.
 psram:
   mode: octal
   speed: 80MHz
 
+# DEBUG erleichtert die Fehlersuche; bei Bedarf später auf INFO reduzieren.
 logger:
   level: DEBUG
 
+# Lokale HA-Anbindung; Verschlüsselungsschlüssel aus secrets.yaml.
 api:
   encryption:
     key: !secret encryption_key
 
+# Firmware-Updates über das Netzwerk.
 ota:
   - platform: esphome
     encryption:
 
+# Der Fallback-Access-Point hilft bei nicht verfügbarer WLAN-Verbindung.
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
@@ -103,6 +132,7 @@ wifi:
 
 captive_portal:
 
+# Touchcontroller über I²C, Display über SPI.
 i2c:
   - id: touch_i2c_bus
     sda: GPIO6
@@ -115,6 +145,8 @@ spi:
   clk_pin: GPIO10
   mosi_pin: GPIO11
 
+# Die Komponente entscheidet, wann neu gezeichnet wird, und zeichnet das ganze Bild.
+# update_interval und auto_clear_enabled deshalb beibehalten.
 display:
   - platform: ili9xxx
     id: round_display
@@ -132,6 +164,7 @@ display:
     lambda: |-
       id(thermostat_ui).render(it);
 
+# Touchkoordinaten an die UI weitergeben; Menü und Standby behandelt die Komponente.
 touchscreen:
   - platform: cst816
     id: touchscreen_cst816
@@ -160,6 +193,7 @@ touchscreen:
     on_release:
       - logger.log: "TOUCH released"
 
+# Interner Drehgeber: relative Schritte an die UI, keine eigene HA-Sensorentität.
 sensor:
   - platform: rotary_encoder
     id: thermostat_encoder
@@ -184,12 +218,16 @@ sensor:
     on_anticlockwise:
       - lambda: id(thermostat_ui).rotate(-1);
 
+# Lokale Bedienentität des Knobs, auch im HA-Modus erforderlich.
+# Autark: Sollwert/Betriebsart für externe Automationen, keine eigene Heizungsregelung.
+# HA-Modus: Bedienbefehle gehen an source_entity; Rückmeldungen aktualisieren die UI.
 climate:
   - platform: template
     id: thermostat_climate
     name: "Temperaturregler Wohnzimmer"
     optimistic: true
 
+    # UI-Modi. Im HA-Modus akzeptiert die Komponente nur von der Quelle angebotene Modi.
     supported_modes:
       - "OFF"
       - HEAT
@@ -198,10 +236,12 @@ climate:
 
     restore_mode: RESTORE
 
+    # Startwerte ohne gespeicherten Zustand; im HA-Modus gilt die Rückmeldung der Quelle.
     initial_state:
       mode: AUTO
       target_temperature: 21.0
 
+    # Autarke Anzeigegrenzen; im HA-Modus werden die Grenzen der Quelle übernommen.
     visual:
       min_temperature: 5.0
       max_temperature: 30.0
@@ -212,6 +252,8 @@ climate:
     set_mode_action:
       - lambda: id(thermostat_ui).set_mode(x);
 
+# Schreibbare Anzeige-Eingaben, keine eingebauten Temperatur-/Feuchtesensoren.
+# Nur autark verwendet: z. B. per HA-Automation mit echten Messwerten versorgen.
 number:
   - platform: template
     id: room_temperature
@@ -243,6 +285,7 @@ number:
     on_value:
       - lambda: id(thermostat_ui).redraw();
 
+  # Helligkeit während Standby; bleibt auch im HA-Modus einstellbar.
   - platform: template
     id: standby_brightness
     name: "Standby Helligkeit"
@@ -259,6 +302,7 @@ number:
     on_value:
       - lambda: id(thermostat_ui).standby_brightness_changed(x);
 
+  # Inaktivitätsdauer bis Standby, in Sekunden.
   - platform: template
     id: standby_timeout
     name: "Timeout"
@@ -272,6 +316,7 @@ number:
     mode: box
     initial_value: 300
 
+# Nachrichtentext; notification_present steuert die Anzeige des Popups.
 text:
   - platform: template
     id: notification_text
@@ -286,9 +331,11 @@ text:
     on_value:
       - lambda: id(thermostat_ui).notification_changed();
 
+# Einstellungen, die ohne erneutes Flashen über HA geändert werden können.
 select:
   - platform: template
     id: temperature_step
+    # Im HA-Modus wird mindestens die Schrittweite der Quelle verwendet.
     name: "Temperatur Schrittweite"
     entity_category: config
     optimistic: true
@@ -317,6 +364,7 @@ select:
       - lambda: |-
           id(thermostat_ui).redraw(true);
 
+  # Reine Icon-Auswahl: schaltet selbst weder Heizkörper noch Klimaanlage um.
   - platform: template
     id: heating_source
     name: "Heizquelle"
@@ -334,6 +382,7 @@ select:
       - lambda: |-
           id(thermostat_ui).redraw(true);
 
+# Anzeigezustände aus HA; das Fenstersymbol schaltet die Heizung nicht selbst ab.
 switch:
   - platform: template
     id: window_open
@@ -367,11 +416,14 @@ switch:
           id(notification_present).publish_state(false);
           id(thermostat_ui).redraw(true);
 
+# Kurzer Bestätigungsimpuls (500 ms) nach Quittieren einer Nachricht am Knob.
+# HA kann darauf reagieren und Text sowie notification_present zurücksetzen.
 binary_sensor:
   - platform: template
     id: notification_acknowledged
     name: "Benachrichtigung bestätigt"
 
+# Physische Ausgänge: Display-PWM, Power-LED und die beim Boot gesetzten Board-Pins.
 output:
   - platform: ledc
     id: display_backlight_pwm
@@ -390,6 +442,7 @@ output:
     id: board_out2
     pin: GPIO2
 
+# Displayhelligkeit und RGB-Ring sind getrennte HA-Lichtentitäten.
 light:
   - platform: monochromatic
     id: display_backlight
