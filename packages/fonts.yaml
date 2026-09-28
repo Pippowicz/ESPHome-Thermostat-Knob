@@ -1,0 +1,38 @@
+# Override these defaults in your device YAML's substitutions.
+substitutions:
+  font_file: "gfonts://Roboto"
+  thermostat_font_file: "${font_file}"
+  thermostat_font_size: "38"
+  standby_temperature_font_file: "${font_file}"
+  standby_temperature_font_size: "57"
+  room_temperature_font_file: "${font_file}"
+  room_temperature_font_size: "18"
+  menu_font_file: "${font_file}"
+  menu_font_size: "16"
+  notification_font_file: "${font_file}"
+  notification_font_size: "18"
+
+font:
+  - file: "${thermostat_font_file}"
+    id: thermostat_font
+    size: ${thermostat_font_size}
+
+  - file: "${standby_temperature_font_file}"
+    id: standby_temperature_font
+    size: ${standby_temperature_font_size}
+
+  - file: "${room_temperature_font_file}"
+    id: room_temperature_font
+    size: ${room_temperature_font_size}
+
+  - file: "${menu_font_file}"
+    id: menu_font
+    size: ${menu_font_size}
+    glyphs:
+      - " !\"%()+,-./0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz°äöüÄÖÜß"
+
+  - file: "${notification_font_file}"
+    id: notification_font
+    size: ${notification_font_size}
+    glyphs:
+      - " !\"%()+,-./0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz°äöüÄÖÜß?"

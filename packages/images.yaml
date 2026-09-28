@@ -1,0 +1,138 @@
+# Override these defaults in your device YAML's substitutions.
+substitutions:
+  mode_auto_icon: "mdi:refresh"
+  mode_auto_icon_size: "28x28"
+  mode_heat_icon: "mdi:fire"
+  mode_heat_icon_size: "28x28"
+  mode_cool_icon: "mdi:snowflake"
+  mode_cool_icon_size: "28x28"
+  mode_off_icon: "mdi:circle-off-outline"
+  mode_off_icon_size: "28x28"
+  standby_mode_auto_icon: "mdi:refresh"
+  standby_mode_auto_icon_size: "42x42"
+  standby_mode_heat_icon: "mdi:fire"
+  standby_mode_heat_icon_size: "42x42"
+  standby_mode_cool_icon: "mdi:snowflake"
+  standby_mode_cool_icon_size: "42x42"
+  standby_mode_off_icon: "mdi:circle-off-outline"
+  standby_mode_off_icon_size: "42x42"
+  room_temperature_icon: "mdi:thermometer"
+  room_temperature_icon_size: "28x28"
+  humidity_icon: "mdi:water"
+  humidity_icon_size: "28x28"
+  heat_source_heatpump_icon: "mdi:fan"
+  heat_source_heatpump_icon_size: "28x28"
+  heat_source_radiator_icon: "mdi:radiator"
+  heat_source_radiator_icon_size: "28x28"
+  heat_source_ac_icon: "mdi:air-conditioner"
+  heat_source_ac_icon_size: "28x28"
+  window_open_icon: "mdi:window-open-variant"
+  window_open_icon_size: "28x28"
+  notification_icon: "mdi:exclamation-thick"
+  notification_icon_size: "28x28"
+
+image:
+  - platform: file
+    file: "${mode_auto_icon}"
+    id: mode_auto_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: ${mode_auto_icon_size}
+
+  - platform: file
+    file: "${mode_heat_icon}"
+    id: mode_heat_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: ${mode_heat_icon_size}
+
+  - platform: file
+    file: "${mode_cool_icon}"
+    id: mode_cool_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: ${mode_cool_icon_size}
+
+  - platform: file
+    file: "${mode_off_icon}"
+    id: mode_off_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: ${mode_off_icon_size}
+
+  - platform: file
+    file: "${standby_mode_auto_icon}"
+    id: standby_mode_auto_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: ${standby_mode_auto_icon_size}
+
+  - platform: file
+    file: "${standby_mode_heat_icon}"
+    id: standby_mode_heat_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: ${standby_mode_heat_icon_size}
+
+  - platform: file
+    file: "${standby_mode_cool_icon}"
+    id: standby_mode_cool_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: ${standby_mode_cool_icon_size}
+
+  - platform: file
+    file: "${standby_mode_off_icon}"
+    id: standby_mode_off_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: ${standby_mode_off_icon_size}
+
+  - platform: file
+    file: "${room_temperature_icon}"
+    id: room_temperature_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: ${room_temperature_icon_size}
+
+  - platform: file
+    file: "${humidity_icon}"
+    id: room_humidity_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: ${humidity_icon_size}
+
+  - platform: file
+    file: "${heat_source_heatpump_icon}"
+    id: heat_source_heatpump_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: ${heat_source_heatpump_icon_size}
+
+  - platform: file
+    file: "${heat_source_radiator_icon}"
+    id: heat_source_radiator_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: ${heat_source_radiator_icon_size}
+
+  - platform: file
+    file: "${heat_source_ac_icon}"
+    id: heat_source_ac_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: ${heat_source_ac_icon_size}
+
+  - platform: file
+    file: "${window_open_icon}"
+    id: window_open_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: ${window_open_icon_size}
+
+  - platform: file
+    file: "${notification_icon}"
+    id: notification_icon
+    type: BINARY
+    transparency: chroma_key
+    resize: ${notification_icon_size}

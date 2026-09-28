@@ -7,6 +7,11 @@ on the touchscreen, and display room conditions and notifications. The UI is
 implemented as an ESPHome external component; hardware and Home Assistant
 entities are configured in YAML.
 
+The device YAML loads the display component, icons and fonts from Git. You only
+need that YAML and your secrets locally; optional substitutions customize the
+assets without editing the packages. The device YAML includes German comments
+explaining configuration, hardware and UI connections.
+
 <p align="center">
   <img src="images/thermostat-main.jpg" alt="Main thermostat screen with temperature arc" width="420">
 </p>
@@ -17,6 +22,9 @@ entities are configured in YAML.
 - [Features](#features)
 - [Requirements](#requirements)
 - [Installation](#installation)
+- [Migrating an existing configuration](#migrating-an-existing-configuration)
+- [Understanding the device YAML](#understanding-the-device-yaml)
+- [Thermostat data source](#thermostat-data-source)
 - [Controls and screens](#controls-and-screens)
 - [Home Assistant integration](#home-assistant-integration)
 - [Hardware and pinout](#hardware-and-pinout)
@@ -38,19 +46,23 @@ Assistant automation can use surplus PV power for heating with the air
 conditioner while reducing radiator demand.
 
 **This repository currently implements the knob interface.** PV-based source
-selection, radiator setback, fallback behavior and bidirectional setpoint
-synchronization are not implemented here. Selecting Auto, Heat or Cool does not
-by itself control either heating system. The heating-source selection currently
-changes a display icon.
+selection, radiator setback and fallback behavior are not implemented here.
+In standalone mode, selecting Auto, Heat or Cool only changes the knob's climate
+entity. The optional linked mode directly controls one existing HA climate
+entity; it does not implement the planned coordination between heating sources.
+The heating-source selection currently changes a display icon.
 
 Runtime communication uses the local ESPHome API. Building the firmware may
 require internet access to download dependencies, fonts, icons and, when using
-the Git installation option, the external component.
+the Git installation option, the external component and YAML packages.
 
 ## Features
 
 - Round 240 × 240 GC9A01A display and CST816D capacitive touchscreen.
-- Rotary temperature adjustment from **5 to 30 °C**, in **0.5 or 1.0 °C** steps.
+- Standalone rotary adjustment from **5 to 30 °C**, in **0.5 or 1.0 °C** steps;
+  linked mode respects the source thermostat's limits and step.
+- Optional bidirectional control of an existing HA climate entity.
+- Git-loaded icon/font packages with defaults and individual substitutions.
 - Home Assistant climate entity with Auto, Heat, Cool and Off modes.
 - Radial touch menu and a custom antialiased 270° temperature arc.
 - Room-temperature display and optional humidity display.
@@ -85,51 +97,63 @@ Copy [esphome-round-thermostat.yaml](esphome-round-thermostat.yaml) from the cho
 branch into your ESPHome configuration directory. Keep the YAML and component
 from the same branch or commit.
 
-### 2. Choose a component source
+### 2. Choose a source
 
-The supplied YAML uses a **local** component by default. Choose one of the
-following options.
+The supplied YAML downloads the external component and both asset packages from
+GitHub. Only the device YAML and your `secrets.yaml` are needed locally.
 
-#### Option A: Load the component from GitHub
+```yaml
+substitutions:
+  thermostat_entity: "false"
+  project_ref: development
+```
 
-Replace the existing `external_components:` block with:
+`project_ref` selects the same branch or full commit SHA for
+`external_components` and `packages`. Use `development` for testing these changes.
+Use `main` only after the packages have been merged there.
+`refresh: 0s` checks Git on each validation/build. Running devices only change
+after compiling and flashing.
+
+For a local copy, replace both source blocks with:
 
 ```yaml
 external_components:
   - source:
-      type: git
-      url: https://github.com/Pippowicz/ESPHome-Thermostat-Knob
-      ref: main
+      type: local
+      path: components
     components: [round_thermostat]
-    refresh: 0s
+
+packages:
+  thermostat_images: !include packages/images.yaml
+  thermostat_fonts: !include packages/fonts.yaml
 ```
 
-To test ongoing work, change `ref: main` to `ref: development`.
+Copy `components/round_thermostat/` and `packages/` alongside your device YAML.
+Keep the `round_thermostat:` ID mappings unchanged. Loading only
+`external_components` does not load YAML packages.
 
-Keep the following `round_thermostat:` block and all its ID mappings unchanged.
-No local `components/` folder is needed with this option.
+### Customize icons and fonts
 
-`refresh: 0s` checks the Git source on each validation/build. It does not update
-a running device: compile and flash to install changes. For a fixed version,
-replace the branch name with a tested full commit SHA.
+The packages provide all defaults; no icon or font substitutions are required
+in your device YAML. Override only what you want to change in the existing
+`substitutions:` block:
 
-#### Option B: Load the component locally
-
-Keep the supplied `external_components:` block and copy the component directory
-alongside the YAML:
-
-```text
-esphome/
-├── esphome-round-thermostat.yaml
-├── secrets.yaml
-└── components/
-    └── round_thermostat/
-        ├── __init__.py
-        ├── round_thermostat.h
-        └── round_thermostat.cpp
+```yaml
+substitutions:
+  thermostat_entity: "false"
+  project_ref: development
+  humidity_icon: "mdi:water-percent"
+  humidity_icon_size: "32x32"
+  font_file: "gfonts://Roboto"
+  thermostat_font_size: "40"
 ```
 
-This option uses the component files on disk rather than fetching them from Git.
+Omitted settings keep their package defaults. `font_file` selects the common
+font; individual `<font_id>_file` settings override it for one role.
+See [packages/README.md](packages/README.md) for every setting and default.
+The original icons, sizes, fonts and glyph sets are preserved by default.
+Larger assets do not move surrounding elements; check for clipping or overlap
+on the fixed 240 × 240 layout after flashing.
 
 ### 3. Configure credentials and room name
 
@@ -159,6 +183,137 @@ esphome compile esphome-round-thermostat.yaml
 
 Flash using the method appropriate for your device, then add it through the
 ESPHome integration in Home Assistant.
+
+## Migrating an existing configuration
+
+Keep your existing secrets, room/device names and chosen `thermostat_entity`.
+The simplest migration is to copy the new base YAML and reapply those settings.
+If your YAML has other customizations, migrate it in place:
+
+1. Add `project_ref: development` to the existing `substitutions:` block.
+2. Copy the new `external_components:` and `packages:` blocks from the base YAML.
+3. Remove the old inline `image:` and `font:` blocks, which are now supplied by
+   the packages. Retain any unrelated custom assets with unique IDs.
+4. Convert your customized icons/fonts into substitutions using the
+   [complete defaults table](packages/README.md). Leave the component ID mappings intact.
+5. Validate, compile and flash. Check the main screen, menu, standby and a
+   notification, especially if you changed asset sizes or fonts.
+
+Do not merge another top-level `substitutions:` block into an existing one:
+add the entries to the block already present. Existing installations continue
+running their old firmware until you flash an update.
+
+## Understanding the device YAML
+
+| Block | Purpose | Usually customize? |
+| --- | --- | --- |
+| `substitutions` | Climate source, Git revision and optional asset overrides | Yes |
+| `external_components` | Downloads the C++ UI component | Only for local installation |
+| `packages` | Downloads icon/font definitions and defaults | Only for local installation |
+| `round_thermostat` | Connects the UI to the configured entity, display and asset IDs | Usually keep mappings |
+| `esphome`, `wifi`, `api`, `ota` | Device identity, connectivity and updates | Names and secrets |
+| `esp32`, `psram`, `i2c`, `spi`, `display`, `touchscreen`, `output` | Board hardware and drivers | Only for different hardware |
+| `sensor` | Rotary encoder events | Usually keep |
+| `climate` | Knob's local thermostat entity and UI command callbacks | Room name |
+| `number`, `text`, `select`, `switch`, `binary_sensor`, `light` | Display inputs, settings, status, notifications and lights | Use through HA |
+
+In `room_humidity_icon: room_humidity_icon`, the left side is a component
+parameter and the right side is an ESPHome ID. The actual icon is configured
+in the package. Change `humidity_icon` or `humidity_icon_size` in substitutions
+to customize it; changing the binding is unnecessary.
+
+Even when linked to HA, `thermostat_climate` is the local knob entity, while
+`source_entity` is the HA entity being controlled. They serve different roles
+and must not reference the knob's own HA entity as its remote source.
+
+## Thermostat data source
+
+Choose the mode with the substitution at the top of the YAML, then compile and
+flash. This is a build-time selection, not a runtime dropdown.
+
+### Standalone (default)
+
+```yaml
+substitutions:
+  thermostat_entity: "false"
+```
+
+This retains the original independent climate entity, restored setpoint, 5–30 °C
+range and writable temperature/humidity display inputs. Existing HA automations
+can keep using those inputs. No remote climate state subscriptions or control
+actions are created. A YAML boolean `false` is also accepted; the quoted form
+makes the substitution explicit.
+
+### Link an existing Home Assistant thermostat
+
+```yaml
+substitutions:
+  thermostat_entity: "climate.hmip_heating_int0000008"
+```
+
+Use the actual entity ID of the thermostat to control. **Do not select the knob's
+own climate entity**, and remove any separate two-way synchronization automation
+between the same two entities to avoid competing controllers.
+
+For testing this feature, load both the YAML and component from `development`.
+When loading from Git, set `project_ref: development` in `substitutions`.
+
+The component subscribes to the selected entity through the local ESPHome API:
+
+| HA state / attribute | Use |
+| --- | --- |
+| Entity state | Operating mode: `off`, `heat`, `cool`, `auto` |
+| `temperature` | Single target temperature |
+| `current_temperature` | Room temperature |
+| `current_humidity` | Room humidity, if the source provides it |
+| `min_temp`, `max_temp` | Target limits and display arc range |
+| `target_temp_step` | Target rounding; defaults to 0.5 °C if absent |
+| `hvac_modes` | Allowed mode commands; unsupported menu labels are dimmed |
+
+Turn the knob to send `climate.set_temperature`; select a mode to send
+`climate.set_hvac_mode`. Changes made in HA or at the source thermostat return to
+the knob automatically. Incoming reports update the local climate state directly
+and never invoke another outbound command. An `off` report with a target of
+4.5 °C, for example, is preserved as a source report rather than sent back as a
+new room-temperature request.
+
+In Home Assistant, open **Settings → Devices & services → ESPHome**, configure
+the knob's integration entry, and enable **Allow the device to perform Home
+Assistant actions**. Reading states alone does not require this option, but
+controlling the source does. See the [ESPHome API documentation](https://esphome.io/components/api/#actions).
+
+The existing `Isttemperatur` and `Luftfeuchtigkeit` number entities remain present
+for compatibility, but are not used by the display in linked mode. The humidity
+display switch still controls visibility. Window status, notifications, the
+heating-source icon and RGB settings remain independent of the linked climate.
+
+**Availability and command handling:**
+
+- Missing or invalid temperature/humidity values display as `--` rather than
+  using persisted standalone values. Humidity is not available on every climate
+  entity; it is not inferred from unrelated room entities.
+- A lost HA subscription shows `HA offline`; an unknown/unavailable source shows
+  `HA wartet`. Commands are blocked until the source is available. Unsent commands
+  are discarded on disconnect and are not replayed after reconnecting.
+- Rapid temperature changes are combined for 250 ms before sending the latest
+  value. The requested value is shown while waiting for HA confirmation.
+- If confirmation does not arrive within five seconds, the knob restores the
+  latest reported state and shows `HA Fehler`. Check HA action permissions and
+  device availability. A late report still updates the values; a new command
+  clears the error indicator.
+- `HA Daten` means the single target or temperature limits are missing. `HA Modus`
+  means the current source mode cannot be represented by this UI.
+
+The current UI supports **Celsius, single-setpoint thermostats**. `heat_cool`
+(two target temperatures), `dry` and `fan_only` are not mapped to Auto. A supported
+mode can still be selected if offered by the source. Source limits and rounding
+apply even when the encoder is configured for a different increment. The encoder
+uses at least the source's step size so both directions remain usable.
+
+Linking a physical radiator thermostat makes its actual setpoint authoritative,
+including temporary setbacks. To keep a separate room wish for future hybrid
+heating control, retain standalone mode or link a suitable virtual HA climate
+entity instead.
 
 ## Controls and screens
 
@@ -246,12 +401,12 @@ on your Home Assistant setup.
 | Display Hintergrundbeleuchtung | Light | Display backlight |
 | RGB Ring | Light | RGB color, brightness and pulse effect |
 
-`Isttemperatur` and `Luftfeuchtigkeit` are writable template numbers, not onboard
+In standalone mode, `Isttemperatur` and `Luftfeuchtigkeit` are writable template numbers, not onboard
 sensor readings. Home Assistant must copy measurements into them. They are
 display inputs and are not currently wired as the climate entity's measured
 temperature/humidity.
 
-The knob preserves these inputs across restarts. It does not yet detect stale
+In standalone mode, the knob preserves these inputs across restarts. It does not yet detect stale
 measurements or indicate when Home Assistant has stopped updating them.
 
 ## Hardware and pinout
@@ -283,8 +438,9 @@ The auxiliary I²C pins are available for future sensors such as a BME280.
 
 | Path | Contents |
 | --- | --- |
-| [esphome-round-thermostat.yaml](esphome-round-thermostat.yaml) | Hardware, assets, HA entities and UI event wiring |
+| [esphome-round-thermostat.yaml](esphome-round-thermostat.yaml) | Commented device configuration, package imports, HA entities and UI wiring |
 | [components/round_thermostat/](components/round_thermostat/) | ESPHome schema and C++ UI implementation |
+| [packages/](packages/) | Icon and font definitions with overridable defaults |
 | [Component documentation](components/round_thermostat/README.md) | API/event wiring and hardware test checklist |
 | [secrets.example.yaml](secrets.example.yaml) | Credential template |
 | [images/](images/) | Photos of the interface |
@@ -302,14 +458,15 @@ Changes are committed to **development** and proposed in a pull request to
 **main**. The maintainer tests the development version on the knob and merges
 the PR when the result is satisfactory.
 
-For testing, use the YAML from `development` with `ref: development` (or matching
-local component files). Review the
+For testing, use the YAML from `development` with `project_ref: development`
+(or matching local component and package files). Review the
 [hardware checklist](components/round_thermostat/README.md#hardware-acceptance-checks)
 when firmware behavior changes.
 
-To return to an earlier version, use its matching YAML and component files, or
-pin the component's `ref` to that version's full commit SHA, then compile and
-flash again. A revert commit can also undo a change on the development branch.
+To return to an earlier version, use its matching YAML, component and packages,
+or set `project_ref` to that version's full commit SHA, then compile and flash
+again. Revisions before the package extraction require their original YAML
+with inline assets. A revert commit can also undo a change on the development branch.
 Changing a Git reference alone does not alter the firmware already on the device.
 
 ## Known limitations and future work
@@ -317,11 +474,27 @@ Changing a Git reference alone does not alter the firmware already on the device
 - Notification text wraps by byte count rather than measured pixel width;
   long words and UTF-8 truncation need improvement.
 - Encoder behavior while the mode menu is open may be refined.
-- Stale room-temperature and humidity inputs are not detected.
+- Standalone room-temperature and humidity inputs have no freshness detection.
+  Linked mode detects HA disconnection and unavailable states, but cannot detect
+  a source integration that continues reporting stale measurements as valid.
 - Additional local sensors may be connected through the auxiliary I²C pins.
 - Heating-source coordination and safe bidirectional synchronization are future
   Home Assistant work, including separating the desired room setpoint from a
   temporary radiator setback.
+
+### Automated checks
+
+The transport-independent synchronization state can be tested without hardware:
+
+```sh
+g++ -std=c++17 -Wall -Wextra -Werror tests/test_remote_climate_state.cpp -o /tmp/test-remote-climate
+/tmp/test-remote-climate
+```
+
+Before accepting a linked-mode change, test startup, both directions of control,
+missing humidity, HA disconnection/reconnection and denied HA action permission.
+Confirm that switching the substitution back to `"false"` preserves standalone
+operation.
 
 ## AI-assisted development
 

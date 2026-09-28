@@ -4,7 +4,7 @@ import esphome.config_validation as cv
 from esphome.components import binary_sensor, climate, display, font, image, light, number, select, switch, text
 from esphome.const import CONF_ID
 
-DEPENDENCIES = ["esp32", "display", "psram"]
+DEPENDENCIES = ["esp32", "display", "psram", "api"]
 MULTI_CONF = True
 round_thermostat_ns = cg.esphome_ns.namespace("round_thermostat")
 RoundThermostat = round_thermostat_ns.class_("RoundThermostat", cg.PollingComponent)
@@ -46,14 +46,30 @@ BINDINGS = {
     "notification_icon": image.Image,
 }
 
+def validate_source(value):
+    if value is False or (isinstance(value, str) and value.strip().lower() == "false"):
+        return False
+    value = cv.string_strict(value).strip()
+    value = cv.entity_id(value)
+    if not value.startswith("climate.") or not value.split(".", 1)[1]:
+        raise cv.Invalid("Use false or a climate.<entity> ID")
+    return value
+
 CONFIG_SCHEMA = cv.Schema({
     cv.GenerateID(): cv.declare_id(RoundThermostat),
+    cv.Optional("source_entity", default=False): validate_source,
     **{cv.Required(key): cv.use_id(type_) for key, type_ in BINDINGS.items()},
 }).extend(cv.COMPONENT_SCHEMA)
 
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
+    if config["source_entity"] is not False:
+        cg.add_define("USE_ROUND_THERMOSTAT_HA")
+        cg.add_define("USE_API_HOMEASSISTANT_STATES")
+        cg.add_define("USE_API_HOMEASSISTANT_SERVICES")
+        cg.add(var.set_source_entity(config["source_entity"]))
     for key in BINDINGS:
         target = await cg.get_variable(config[key])
         cg.add(getattr(var, f"set_{key}")(target))
+
