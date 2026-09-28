@@ -87,53 +87,63 @@ Copy [esphome-round-thermostat.yaml](esphome-round-thermostat.yaml) from the cho
 branch into your ESPHome configuration directory. Keep the YAML and component
 from the same branch or commit.
 
-### 2. Choose a component source
+### 2. Choose a source
 
-The supplied YAML uses a **local** component by default. Choose one of the
-following options.
+The supplied YAML downloads the external component and both asset packages from
+GitHub. Only the device YAML and your `secrets.yaml` are needed locally.
 
-#### Option A: Load the component from GitHub
+```yaml
+substitutions:
+  thermostat_entity: "false"
+  project_ref: development
+```
 
-Replace the existing `external_components:` block with:
+`project_ref` selects the same branch or full commit SHA for
+`external_components` and `packages`. Use `development` for testing these changes.
+Use `main` only after the packages have been merged there.
+`refresh: 0s` checks Git on each validation/build. Running devices only change
+after compiling and flashing.
+
+For a local copy, replace both source blocks with:
 
 ```yaml
 external_components:
   - source:
-      type: git
-      url: https://github.com/Pippowicz/ESPHome-Thermostat-Knob
-      ref: main
+      type: local
+      path: components
     components: [round_thermostat]
-    refresh: 0s
+
+packages:
+  thermostat_images: !include packages/images.yaml
+  thermostat_fonts: !include packages/fonts.yaml
 ```
 
-To test ongoing work, change `ref: main` to `ref: development`.
+Copy `components/round_thermostat/` and `packages/` alongside your device YAML.
+Keep the `round_thermostat:` ID mappings unchanged. Loading only
+`external_components` does not load YAML packages.
 
-Keep the following `round_thermostat:` block and all its ID mappings unchanged.
-No local `components/` folder is needed with this option.
+### Customize icons and fonts
 
-`refresh: 0s` checks the Git source on each validation/build. It does not update
-a running device: compile and flash to install changes. For a fixed version,
-replace the branch name with a tested full commit SHA.
+The packages provide all defaults; no icon or font substitutions are required
+in your device YAML. Override only what you want to change in the existing
+`substitutions:` block:
 
-#### Option B: Load the component locally
-
-Keep the supplied `external_components:` block and copy the component directory
-alongside the YAML:
-
-```text
-esphome/
-├── esphome-round-thermostat.yaml
-├── secrets.yaml
-└── components/
-    └── round_thermostat/
-        ├── __init__.py
-        ├── round_thermostat.h
-        ├── round_thermostat.cpp
-        ├── round_thermostat_ha.cpp
-        └── remote_climate_state.h
+```yaml
+substitutions:
+  thermostat_entity: "false"
+  project_ref: development
+  humidity_icon: "mdi:water-percent"
+  humidity_icon_size: "32x32"
+  font_file: "gfonts://Roboto"
+  thermostat_font_size: "40"
 ```
 
-This option uses the component files on disk rather than fetching them from Git.
+Omitted settings keep their package defaults. `font_file` selects the common
+font; individual `<font_id>_file` settings override it for one role.
+See [packages/README.md](packages/README.md) for every setting and default.
+The original icons, sizes, fonts and glyph sets are preserved by default.
+Larger assets do not move surrounding elements; check for clipping or overlap
+on the fixed 240 × 240 layout after flashing.
 
 ### 3. Configure credentials and room name
 
@@ -194,7 +204,7 @@ own climate entity**, and remove any separate two-way synchronization automation
 between the same two entities to avoid competing controllers.
 
 For testing this feature, load both the YAML and component from `development`.
-When loading from Git, set `ref: development` in `external_components`.
+When loading from Git, set `project_ref: development` in `substitutions`.
 
 The component subscribes to the selected entity through the local ESPHome API:
 
@@ -378,6 +388,7 @@ The auxiliary I²C pins are available for future sensors such as a BME280.
 | --- | --- |
 | [esphome-round-thermostat.yaml](esphome-round-thermostat.yaml) | Hardware, assets, HA entities and UI event wiring |
 | [components/round_thermostat/](components/round_thermostat/) | ESPHome schema and C++ UI implementation |
+| [packages/](packages/) | Icon and font definitions with overridable defaults |
 | [Component documentation](components/round_thermostat/README.md) | API/event wiring and hardware test checklist |
 | [secrets.example.yaml](secrets.example.yaml) | Credential template |
 | [images/](images/) | Photos of the interface |
@@ -448,4 +459,3 @@ When redistributing the project or substantial portions of it, retain the projec
 name, copyright notices and license information.
 
 **Attribution:** ESPHome Round Thermostat / ESPHome-Thermostat-Knob by Pippowicz.
-

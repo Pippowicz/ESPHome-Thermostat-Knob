@@ -7,45 +7,17 @@ It is designed for the existing 240 × 240 Elecrow ESP32-S3 knob configuration.
 
 ## Installation
 
-Copy the updated `esphome-round-thermostat.yaml` and the complete
-`components/round_thermostat/` directory into the ESPHome configuration directory:
+The supplied `esphome-round-thermostat.yaml` loads this component and the
+image/font packages from Git. Set `project_ref` to the desired branch or commit;
+the default is `development`. Keep your existing `secrets.yaml`.
 
-```text
-esphome/
-├── esphome-round-thermostat.yaml
-├── secrets.yaml
-└── components/
-    └── round_thermostat/
-        ├── __init__.py
-        ├── round_thermostat.h
-        ├── round_thermostat.cpp
-        ├── round_thermostat_ha.cpp
-        └── remote_climate_state.h
-```
+For local installation, copy both `components/` and `packages/` alongside
+the device YAML and use the local source blocks in the
+[root installation guide](../../README.md#2-choose-a-source).
 
-The supplied YAML uses a local external component, so no component download is
-needed at build time. Fonts and MDI icons retain their existing remote sources.
-The firmware runs locally, as before.
-
-Keep your existing secrets. Compile with ESPHome 2026.9.0:
-
-```sh
-esphome config esphome-round-thermostat.yaml
-esphome compile esphome-round-thermostat.yaml
-```
-
-For a Git source, replace only the `external_components` block with a source
-pointing to a branch/tag/commit that contains this component. Pin a tested commit
-for reproducible builds:
-
-```yaml
-external_components:
-  - source:
-      type: git
-      url: https://github.com/Pippowicz/ESPHome-Thermostat-Knob
-      ref: YOUR_TESTED_COMMIT
-    components: [round_thermostat]
-```
+Font and icon defaults are in [packages/](../../packages/README.md).
+Override them through device substitutions, then compile and flash.
+Asset downloads happen at build time; the firmware still runs locally.
 
 ## Responsibilities
 
@@ -58,8 +30,9 @@ The component owns:
 - Inactivity timing, standby brightness and wake-up brightness restoration.
 - The 500 ms notification acknowledgement pulse.
 
-The YAML retains hardware drivers and pins, fonts, images, Wi-Fi/API/OTA settings,
+The YAML retains hardware drivers and pins, Wi-Fi/API/OTA settings,
 the RGB light, and all existing Home Assistant entities and persistence settings.
+Fonts and images are defined in the YAML packages.
 Every required entity/font/image is bound through a typed ID in
 `round_thermostat:`; the C++ component does not depend on generated global IDs.
 
@@ -148,4 +121,3 @@ International); the extracted code retains that license.
 The original YAML was developed with OpenAI ChatGPT and tested on real hardware,
 as documented upstream. This component extraction was AI-assisted and subsequently tested successfully
 by the project owner on the physical knob.
-

@@ -1,13 +1,25 @@
 substitutions:
   # "false": independent knob; otherwise an existing HA climate entity.
-  thermostat_entity: "false" # e.g. "climate.hmip_heating_int0000008"
+  thermostat_entity: "false"
+  project_ref: development
 
-# Local component; copy the components directory alongside this YAML.
+# Keep component and asset packages on the same branch or commit.
 external_components:
   - source:
-      type: local
-      path: components
+      type: git
+      url: https://github.com/Pippowicz/ESPHome-Thermostat-Knob
+      ref: ${project_ref}
     components: [round_thermostat]
+    refresh: 0s
+
+packages:
+  thermostat_assets:
+    url: https://github.com/Pippowicz/ESPHome-Thermostat-Knob
+    ref: ${project_ref}
+    files:
+      - packages/images.yaml
+      - packages/fonts.yaml
+    refresh: 0s
 
 round_thermostat:
   id: thermostat_ui
@@ -102,137 +114,6 @@ spi:
   id: display_spi
   clk_pin: GPIO10
   mosi_pin: GPIO11
-
-font:
-  - file: "gfonts://Roboto"
-    id: thermostat_font
-    size: 38
-
-  - file: "gfonts://Roboto"
-    id: standby_temperature_font
-    size: 57
-
-  - file: "gfonts://Roboto"
-    id: room_temperature_font
-    size: 18
-
-  - file: "gfonts://Roboto"
-    id: menu_font
-    size: 16
-    glyphs:
-      - " !\"%()+,-./0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz°äöüÄÖÜß"
-
-  - file: "gfonts://Roboto"
-    id: notification_font
-    size: 18
-    glyphs:
-      - " !\"%()+,-./0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz°äöüÄÖÜß?"
-
-image:
-  - platform: file
-    file: "mdi:refresh"
-    id: mode_auto_icon
-    type: BINARY
-    transparency: chroma_key
-    resize: 28x28
-
-  - platform: file
-    file: "mdi:fire"
-    id: mode_heat_icon
-    type: BINARY
-    transparency: chroma_key
-    resize: 28x28
-
-  - platform: file
-    file: "mdi:snowflake"
-    id: mode_cool_icon
-    type: BINARY
-    transparency: chroma_key
-    resize: 28x28
-
-  - platform: file
-    file: "mdi:circle-off-outline"
-    id: mode_off_icon
-    type: BINARY
-    transparency: chroma_key
-    resize: 28x28
-
-  - platform: file
-    file: "mdi:refresh"
-    id: standby_mode_auto_icon
-    type: BINARY
-    transparency: chroma_key
-    resize: 42x42
-
-  - platform: file
-    file: "mdi:fire"
-    id: standby_mode_heat_icon
-    type: BINARY
-    transparency: chroma_key
-    resize: 42x42
-
-  - platform: file
-    file: "mdi:snowflake"
-    id: standby_mode_cool_icon
-    type: BINARY
-    transparency: chroma_key
-    resize: 42x42
-
-  - platform: file
-    file: "mdi:circle-off-outline"
-    id: standby_mode_off_icon
-    type: BINARY
-    transparency: chroma_key
-    resize: 42x42
-
-  - platform: file
-    file: "mdi:thermometer"
-    id: room_temperature_icon
-    type: BINARY
-    transparency: chroma_key
-    resize: 28x28
-
-  - platform: file
-    file: "mdi:water"
-    id: room_humidity_icon
-    type: BINARY
-    transparency: chroma_key
-    resize: 28x28
-
-  - platform: file
-    file: "mdi:fan"
-    id: heat_source_heatpump_icon
-    type: BINARY
-    transparency: chroma_key
-    resize: 28x28
-
-  - platform: file
-    file: "mdi:radiator"
-    id: heat_source_radiator_icon
-    type: BINARY
-    transparency: chroma_key
-    resize: 28x28
-
-  - platform: file
-    file: "mdi:air-conditioner"
-    id: heat_source_ac_icon
-    type: BINARY
-    transparency: chroma_key
-    resize: 28x28
-
-  - platform: file
-    file: "mdi:window-open-variant"
-    id: window_open_icon
-    type: BINARY
-    transparency: chroma_key
-    resize: 28x28
-
-  - platform: file
-    file: "mdi:exclamation-thick"
-    id: notification_icon
-    type: BINARY
-    transparency: chroma_key
-    resize: 28x28
 
 display:
   - platform: ili9xxx
@@ -533,5 +414,3 @@ light:
           update_interval: 1s
           min_brightness: 15%
           max_brightness: 100%
-
-
