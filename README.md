@@ -484,6 +484,42 @@ Changing a Git reference alone does not alter the firmware already on the device
 
 ### Automated checks
 
+The [Thermostat checks workflow](.github/workflows/check.yml) runs on pushes to
+`development` and `main`, and on pull requests targeting `main`. It can also be
+started manually from the repository's **Actions** tab once available on the
+default branch.
+
+It validates three configurations (standalone, linked HA climate and custom
+icon/font overrides), checks substitution inheritance, runs the native C++
+synchronization tests, and compiles standalone and linked firmware in separate
+jobs. Firmware jobs start only after configuration and synchronization checks
+pass. The version in `requirements-ci.txt` pins ESPHome; dependency downloads
+are cached between builds.
+
+`scripts/check_config.py` reads the actual checked-out device YAML and declared
+packages, substitutes synthetic credentials and uses the checked-out component.
+It never reads a real `secrets.yaml` or fetches the component from a moving branch.
+On pull requests, checkout tests GitHub's proposed merge with `main`. The generated
+configurations are stored under `.ci-build/`; source files remain unchanged.
+
+Results appear in the PR's **Checks** tab. A failed check includes its log;
+successful checks do not merge or flash anything. No HA connection or repository
+secrets are required, and the test firmware is not published for installation.
+Internet access is needed for build tools, fonts and icons, so download failures
+can also cause a red check. UI appearance and real-device integration still need
+the maintainer's hardware test. Required checks/branch protection can be enabled
+separately after the first successful run.
+
+To reproduce the configuration and build checks locally (Python 3.12 in CI):
+
+```sh
+python -m venv .venv
+.venv/bin/python -m pip install -r requirements-ci.txt
+.venv/bin/python scripts/check_config.py validate
+.venv/bin/esphome compile .ci-build/standalone.yaml
+.venv/bin/esphome compile .ci-build/linked.yaml
+```
+
 The transport-independent synchronization state can be tested without hardware:
 
 ```sh
