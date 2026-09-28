@@ -1,0 +1,76 @@
+name: Thermostat checks
+
+on:
+  push:
+    branches: [development, main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: thermostat-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  XDG_CACHE_HOME: ${{ github.workspace }}/.ci-cache
+  ESPHOME_DATA_DIR: ${{ github.workspace }}/.ci-build/esphome
+  PLATFORMIO_CORE_DIR: ${{ github.workspace }}/.ci-cache/platformio
+
+jobs:
+  validate:
+    name: Configuration and sync tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-ci.txt
+      - name: Install ESPHome
+        run: python -m pip install -r requirements-ci.txt
+      - name: Validate defaults, HA mode and asset overrides
+        run: python scripts/check_config.py validate
+      - name: Test synchronization state
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/test_remote_climate_state.cpp -o "$RUNNER_TEMP/test-remote-climate"
+          "$RUNNER_TEMP/test-remote-climate"
+
+  firmware:
+    name: Firmware (${{ matrix.mode }})
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [standalone, linked]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-ci.txt
+      - name: Cache downloaded toolchains and dependencies
+        uses: actions/cache@v4
+        with:
+          path: .ci-cache
+          key: thermostat-${{ runner.os }}-${{ runner.arch }}-${{ matrix.mode }}-${{ hashFiles('requirements-ci.txt') }}-${{ github.sha }}
+          restore-keys: |
+            thermostat-${{ runner.os }}-${{ runner.arch }}-${{ matrix.mode }}-${{ hashFiles('requirements-ci.txt') }}-
+      - name: Install ESPHome
+        run: python -m pip install -r requirements-ci.txt
+      - name: Prepare configuration from this checkout
+        run: python scripts/check_config.py prepare
+      - name: Compile firmware (never flash)
+        run: esphome compile .ci-build/${{ matrix.mode }}.yaml
+
